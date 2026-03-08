@@ -42,6 +42,17 @@ export const TOPIC_KEYWORDS: Record<string, string[]> = {
   Crypto: ["crypto", "bitcoin", "ethereum", "BTC", "digital asset", "blockchain", "stablecoin"],
 };
 
+export const TRENDING_BLOCKLIST = new Set([
+  // News wire services / media organizations
+  "Reuters", "AP", "Bloomberg", "Financial Times", "Associated Press",
+  "Wall Street Journal", "CNBC", "CNN", "BBC", "The Guardian",
+  "Washington Post", "New York Times", "WSJ", "FT",
+  // Overly generic geopolitical/macro terms
+  "Geopolitics", "Global Markets", "Global Economy", "World Economy",
+  "Financial Markets", "Stock Market", "Markets", "Economy", "Finance",
+  "News", "Report", "Update", "Analysis",
+]);
+
 export const TIME_WINDOW_DAYS: Record<string, number> = {
   "7D": 7,
   "1M": 30,

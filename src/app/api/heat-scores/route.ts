@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
+import { TRENDING_BLOCKLIST } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,8 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ scores: scores || [] });
+    const filtered = (scores || []).filter(s => !TRENDING_BLOCKLIST.has(s.entity_name));
+    return NextResponse.json({ scores: filtered });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });

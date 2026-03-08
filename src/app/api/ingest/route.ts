@@ -12,7 +12,7 @@ export async function POST() {
     const supabase = getServiceClient();
     const news = await fetchGeneralNews();
 
-    const results = { inserted: 0, skipped: 0, errors: 0 };
+    const results = { inserted: 0, skipped: 0, filtered: 0, errors: 0 };
 
     // Process in batches of 10
     const batchSize = 10;
@@ -57,6 +57,13 @@ export async function POST() {
               item.headline,
               item.summary || ""
             );
+
+            // Prune irrelevant articles (opinion pieces, advice columns, etc.)
+            if (!metadata.is_relevant) {
+              await supabase.from("articles").delete().eq("id", articleId);
+              results.filtered++;
+              return;
+            }
 
             // Generate embedding
             const embeddingText = `${item.headline}. ${item.summary || ""}`;
