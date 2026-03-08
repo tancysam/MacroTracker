@@ -6,15 +6,25 @@ import type { TimeRange } from "@/lib/types";
 
 interface PriceChartProps {
   topic: string;
-  articles: { published_at: string; headline: string; sentiment: string }[];
+  articles: { id: string; published_at: string; headline: string; sentiment: string }[];
+  onBubbleClick?: (articleId: string) => void;
+  onBubbleHover?: (articleId: string | null) => void;
+  hoveredArticleId?: string | null;
 }
 
-export default function PriceChart({ topic, articles }: PriceChartProps) {
+export default function PriceChart({
+  topic,
+  articles,
+  onBubbleClick,
+  onBubbleHover,
+  hoveredArticleId,
+}: PriceChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [selectedMarket, setSelectedMarket] = useState("US 10Y Yield");
-  const [timeRange, setTimeRange] = useState<TimeRange>("6M");
+  const [timeRange, setTimeRange] = useState<TimeRange>("1M");
   const [candles, setCandles] = useState<{ t: number[]; c: number[] } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; headline: string } | null>(null);
 
   const fetchCandles = useCallback(async () => {
     setLoading(true);
@@ -48,7 +58,6 @@ export default function PriceChart({ topic, articles }: PriceChartProps) {
 
   const timeRanges: TimeRange[] = ["1M", "3M", "6M", "1Y", "ALL"];
 
-  // Render chart as SVG
   const renderChart = () => {
     if (!candles || candles.t.length === 0) {
       return (
@@ -60,7 +69,7 @@ export default function PriceChart({ topic, articles }: PriceChartProps) {
 
     const width = 1000;
     const height = 300;
-    const padding = { top: 20, right: 20, bottom: 20, left: 0 };
+    const padding = { top: 40, right: 20, bottom: 20, left: 0 };
     const chartW = width - padding.left - padding.right;
     const chartH = height - padding.top - padding.bottom;
 
@@ -78,21 +87,32 @@ export default function PriceChart({ topic, articles }: PriceChartProps) {
 
     const pathD = `M${points.join(" L")}`;
 
-    // Event bubbles for articles
-    const eventBubbles = articles
-      .map((a) => {
-        const at = Math.floor(new Date(a.published_at).getTime() / 1000);
-        const idx = times.findIndex((t, i) => i < times.length - 1 && t <= at && times[i + 1] > at);
-        if (idx < 0) return null;
-        const x = padding.left + (idx / (prices.length - 1)) * chartW;
-        const y = padding.top + chartH - ((prices[idx] - minP) / range) * chartH;
-        const color =
-          a.sentiment === "Bearish" ? "#ff4d6d" : a.sentiment === "Bullish" ? "#00f5d4" : "#fb8500";
-        return { x, y, color, headline: a.headline };
-      })
-      .filter(Boolean);
+    // Map articles to bubble positions — find nearest candle by timestamp
+    // Track how many bubbles land on each candle index so we can offset them
+    const slotsByIdx = new Map<number, number>();
+    const eventBubbles = articles.map((a) => {
+      const at = Math.floor(new Date(a.published_at).getTime() / 1000);
+      let idx = 0;
+      let minDiff = Math.abs(times[0] - at);
+      for (let i = 1; i < times.length; i++) {
+        const diff = Math.abs(times[i] - at);
+        if (diff < minDiff) { minDiff = diff; idx = i; }
+      }
+      const baseX = padding.left + (idx / (prices.length - 1)) * chartW;
+      const baseY = padding.top + chartH - ((prices[idx] - minP) / range) * chartH;
+      const color =
+        a.sentiment === "Bearish" ? "#ff4d6d" : a.sentiment === "Bullish" ? "#00f5d4" : "#fb8500";
+      const prevPrice = idx > 0 ? prices[idx - 1] : prices[idx];
+      const bpsChange = Math.round((prices[idx] - prevPrice) * 100);
+      const bpsLabel = bpsChange >= 0 ? `+${bpsChange}bps` : `${bpsChange}bps`;
+      // Spread bubbles on the same candle: alternate left/right and stack upward
+      const slot = slotsByIdx.get(idx) || 0;
+      slotsByIdx.set(idx, slot + 1);
+      const xOffset = slot === 0 ? 0 : slot % 2 === 1 ? (Math.ceil(slot / 2) * 22) : -(Math.ceil(slot / 2) * 22);
+      const yOffset = slot * 24;
+      return { x: baseX + xOffset, y: baseY - yOffset, color, headline: a.headline, id: a.id, bpsLabel };
+    });
 
-    // Y-axis labels
     const yLabels = Array.from({ length: 5 }, (_, i) => {
       const val = minP + (range * i) / 4;
       const y = padding.top + chartH - (i / 4) * chartH;
@@ -100,38 +120,94 @@ export default function PriceChart({ topic, articles }: PriceChartProps) {
     });
 
     return (
-      <svg ref={svgRef} viewBox={`0 0 ${width} ${height}`} className="w-full h-[300px]">
-        {/* Grid lines */}
-        {yLabels.map((label, i) => (
-          <line
-            key={i}
-            x1={padding.left}
-            y1={label.y}
-            x2={width - padding.right}
-            y2={label.y}
-            stroke="#1e293b"
-            strokeDasharray="4"
-            strokeWidth="1"
-          />
-        ))}
-        {/* Price line */}
-        <path d={pathD} fill="none" stroke="#00d4ff" strokeWidth="2" className="drop-shadow-[0_0_8px_rgba(0,212,255,0.8)]" />
-        {/* Event bubbles */}
-        {eventBubbles.map((bubble, i) => (
-          <g key={i}>
+      <div className="relative">
+        <svg
+          ref={svgRef}
+          viewBox={`0 0 ${width} ${height}`}
+          className="w-full h-[300px]"
+        >
+          {/* Grid lines */}
+          {yLabels.map((label, i) => (
             <line
-              x1={bubble!.x}
-              y1={bubble!.y}
-              x2={bubble!.x}
-              y2={height - padding.bottom}
-              stroke={bubble!.color}
+              key={i}
+              x1={padding.left}
+              y1={label.y}
+              x2={width - padding.right}
+              y2={label.y}
+              stroke="#1e293b"
               strokeDasharray="4"
               strokeWidth="1"
             />
-            <circle cx={bubble!.x} cy={bubble!.y} r="6" fill={bubble!.color} />
-          </g>
-        ))}
-      </svg>
+          ))}
+
+          {/* Price line */}
+          <path
+            d={pathD}
+            fill="none"
+            stroke="#00d4ff"
+            strokeWidth="2"
+            className="drop-shadow-[0_0_8px_rgba(0,212,255,0.8)]"
+          />
+
+          {/* Event bubbles */}
+          {eventBubbles.map((bubble, i) => {
+            const isHovered = hoveredArticleId === bubble.id;
+            return (
+              <g
+                key={i}
+                style={{ cursor: "pointer" }}
+                onClick={() => onBubbleClick?.(bubble.id)}
+                onMouseEnter={() => {
+                  onBubbleHover?.(bubble.id);
+                  setTooltip({ x: bubble.x, y: bubble.y, headline: bubble.headline });
+                }}
+                onMouseLeave={() => {
+                  onBubbleHover?.(null);
+                  setTooltip(null);
+                }}
+              >
+                <line
+                  x1={bubble.x}
+                  y1={bubble.y}
+                  x2={bubble.x}
+                  y2={height - padding.bottom}
+                  stroke={bubble.color}
+                  strokeDasharray="4"
+                  strokeWidth={isHovered ? 2 : 1}
+                  opacity={isHovered ? 1 : 0.5}
+                />
+                {/* Larger invisible hit area */}
+                <circle cx={bubble.x} cy={bubble.y} r="14" fill="transparent" />
+                {/* BPS label */}
+                <rect x={bubble.x - 22} y={bubble.y - 32} width="44" height="18" rx="4" fill={bubble.color} opacity="0.15" />
+                <rect x={bubble.x - 22} y={bubble.y - 32} width="44" height="18" rx="4" fill="none" stroke={bubble.color} strokeWidth="1" opacity="0.6" />
+                <text x={bubble.x} y={bubble.y - 19} textAnchor="middle" fill={bubble.color} fontSize="9" fontWeight="bold">
+                  {bubble.bpsLabel}
+                </text>
+                {/* Glow ring when hovered */}
+                {isHovered && (
+                  <circle cx={bubble.x} cy={bubble.y} r="10" fill="none" stroke={bubble.color} strokeWidth="2" opacity="0.4" />
+                )}
+                <circle cx={bubble.x} cy={bubble.y} r={isHovered ? 8 : 6} fill={bubble.color} />
+              </g>
+            );
+          })}
+        </svg>
+
+        {/* Tooltip */}
+        {tooltip && (
+          <div
+            className="absolute z-20 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white max-w-[220px] pointer-events-none shadow-xl"
+            style={{
+              left: `${(tooltip.x / 1000) * 100}%`,
+              top: `${(tooltip.y / 300) * 100}%`,
+              transform: "translate(-50%, -130%)",
+            }}
+          >
+            {tooltip.headline}
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -194,3 +270,4 @@ export default function PriceChart({ topic, articles }: PriceChartProps) {
     </div>
   );
 }
+

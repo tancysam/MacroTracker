@@ -1,10 +1,18 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 import type { Article } from "@/lib/types";
 import SentimentBadge from "./SentimentBadge";
 
-export default function TimelineCard({ article }: { article: Article }) {
+interface TimelineCardProps {
+  article: Article;
+  isHighlighted?: boolean;
+  onHover?: (articleId: string | null) => void;
+}
+
+export default function TimelineCard({ article, isHighlighted, onHover }: TimelineCardProps) {
+  const cardRef = useRef<HTMLDivElement>(null);
   const date = new Date(article.published_at);
   const month = date.toLocaleString("en-US", { month: "short" }).toUpperCase();
   const day = date.getDate().toString().padStart(2, "0");
@@ -17,25 +25,44 @@ export default function TimelineCard({ article }: { article: Article }) {
         : "bg-[#fb8500]";
 
   const allEntities = [
-    ...article.entities_topics,
-    ...article.entities_markets,
-    ...article.entities_companies,
-    ...article.entities_policies,
+    ...(article.entities_topics || []),
+    ...(article.entities_markets || []),
+    ...(article.entities_companies || []),
+    ...(article.entities_policies || []),
   ].slice(0, 4);
 
+  // Scroll into view when highlighted from graph click
+  useEffect(() => {
+    if (isHighlighted && cardRef.current) {
+      cardRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [isHighlighted]);
+
   return (
-    <div className="relative">
+    <div
+      ref={cardRef}
+      className="relative"
+      data-article-id={article.id}
+      onMouseEnter={() => onHover?.(article.id)}
+      onMouseLeave={() => onHover?.(null)}
+    >
       {/* Date column */}
       <div className="absolute -left-[41px] top-0 flex flex-col items-center w-6">
         <span className="text-[10px] font-bold text-slate-500 mb-1 uppercase">{month}</span>
         <span className="text-xl font-black text-white">{day}</span>
         <div
-          className={`w-6 h-6 rounded-full ${sentimentColor} border-4 border-[#080b12] mt-2 z-10`}
+          className={`w-6 h-6 rounded-full ${sentimentColor} border-4 border-[#080b12] mt-2 z-10 transition-transform duration-200 ${isHighlighted ? "scale-125" : ""}`}
         />
       </div>
 
       {/* Card */}
-      <div className="bg-slate-900/10 border border-slate-800 rounded-xl p-6 relative hover:border-[#00d4ff]/30 transition-colors">
+      <div
+        className={`bg-slate-900/10 border rounded-xl p-6 relative transition-all duration-200 ${
+          isHighlighted
+            ? "border-[#00d4ff] shadow-[0_0_20px_rgba(0,212,255,0.15)]"
+            : "border-slate-800 hover:border-[#00d4ff]/30"
+        }`}
+      >
         <div className="flex justify-between items-start mb-4">
           <div className="flex gap-2">
             <SentimentBadge sentiment={article.sentiment} />
@@ -64,7 +91,7 @@ export default function TimelineCard({ article }: { article: Article }) {
             ))}
           </div>
           <div className="flex items-center gap-4">
-            {article.entities_people.slice(0, 2).map((person) => (
+            {(article.entities_people || []).slice(0, 2).map((person) => (
               <span
                 key={person}
                 className="text-[10px] font-medium text-slate-500 flex items-center gap-1"
