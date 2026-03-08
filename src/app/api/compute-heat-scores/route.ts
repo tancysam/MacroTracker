@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServiceClient } from "@/lib/supabase";
+import { TRENDING_BLOCKLIST } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,7 @@ export async function POST() {
     const scores: { entity_name: string; entity_type: string; heat_score: number }[] = [];
 
     for (const [name, data] of thisWeekCounts) {
+      if (TRENDING_BLOCKLIST.has(name)) continue;
       const lastCount = lastWeekCounts.get(name) || 0;
       let heatScore: number;
 
