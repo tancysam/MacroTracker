@@ -1,218 +1,114 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import NavHeader from "@/components/NavHeader";
 import FocusArticleBar from "@/components/FocusArticleBar";
-import GraphFilterPanel from "@/components/GraphFilterPanel";
 import AssociationGraph from "@/components/AssociationGraph";
-import GraphDetailPanel from "@/components/GraphDetailPanel";
-import type { Article, AssociationNode, AssociationEdge, EntityType, Sentiment, TimeWindow } from "@/lib/types";
+import SentimentBadge from "@/components/SentimentBadge";
+import type {
+  AssociationMode,
+  AssociationNode,
+  AssociationsResponseV2,
+  AssociationsView,
+  EntityType,
+  Sentiment,
+  TimeWindow,
+} from "@/lib/types";
+
+const MODE_OPTIONS: AssociationMode[] = ["broad", "balanced", "strict", "investigative"];
+const TIME_WINDOWS: TimeWindow[] = ["7D", "1M", "3M", "6M"];
+const SENTIMENT_OPTIONS: (Sentiment | "All")[] = ["All", "Bullish", "Bearish", "Neutral"];
+const ENTITY_TYPES: EntityType[] = ["companies", "people", "policies", "markets"];
+
+function formatDate(date: string): string {
+  return new Date(date).toLocaleDateString("en-US", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+  });
+}
+
+function titleCase(mode: AssociationMode): string {
+  return mode[0].toUpperCase() + mode.slice(1);
+}
 
 function AssociationsContent() {
   const searchParams = useSearchParams();
   const articleId = searchParams.get("article") || "";
 
-  const [focusArticle, setFocusArticle] = useState<Article | null>(null);
-  const [nodes, setNodes] = useState<AssociationNode[]>([]);
-  const [edges, setEdges] = useState<AssociationEdge[]>([]);
-  const [selectedNode, setSelectedNode] = useState<AssociationNode | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [timeWindow, setTimeWindow] = useState<TimeWindow>("1M");
+  const [mode, setMode] = useState<AssociationMode>("balanced");
+  const [view, setView] = useState<AssociationsView>("evidence");
+  const [depth, setDepth] = useState(2);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
-  // Filter state
+  const [sentiment, setSentiment] = useState<Sentiment | "All">("All");
+  const [threshold, setThreshold] = useState<number | null>(null);
   const [entityFilters, setEntityFilters] = useState<Record<EntityType, boolean>>({
     companies: true,
     people: true,
     policies: true,
     markets: true,
   });
-  const [timeWindow, setTimeWindow] = useState<TimeWindow>("1M");
-  const [sentimentFilter, setSentimentFilter] = useState<Sentiment | "All">("All");
-  const [linkThreshold, setLinkThreshold] = useState(0.5);
 
-  // Expansion state: track levels and all accumulated nodes/edges
-  const [allNodes, setAllNodes] = useState<AssociationNode[]>([]);
-  const [allEdges, setAllEdges] = useState<AssociationEdge[]>([]);
-  const [maxLevel, setMaxLevel] = useState(0);
-  const [filterResetNotice, setFilterResetNotice] = useState(false);
-
-  // Refs for stable access in filter-change fetch (avoid stale closures)
-  const allNodesRef = useRef<AssociationNode[]>([]);
-  const allEdgesRef = useRef<AssociationEdge[]>([]);
-  const prevArticleIdRef = useRef<string>("");
-  const initialNodesRef = useRef<AssociationNode[]>([]);
-  const initialEdgesRef = useRef<AssociationEdge[]>([]);
+  const [data, setData] = useState<AssociationsResponseV2 | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [activeTraceRoot, setActiveTraceRoot] = useState<string | null>(null);
+  const [selectedGraphNode, setSelectedGraphNode] = useState<AssociationNode | null>(null);
 
   const fetchAssociations = useCallback(async () => {
     if (!articleId) return;
     setLoading(true);
-
-    const isNewArticle = prevArticleIdRef.current !== articleId;
-    if (isNewArticle) {
-      prevArticleIdRef.current = articleId;
-      setSelectedNode(null);
-    }
-
-    // When filters change while expanded, reset to level 1
-    const wasExpanded = !isNewArticle && allNodesRef.current.some((n) => (n.level || 0) >= 2);
-    if (wasExpanded) {
-      setFilterResetNotice(true);
-      setTimeout(() => setFilterResetNotice(false), 3000);
-    }
+    setError(null);
 
     try {
       const params = new URLSearchParams({
         time_window: timeWindow,
-        link_threshold: linkThreshold.toString(),
+        mode,
+        view,
+        depth: String(depth),
       });
-      if (sentimentFilter !== "All") {
-        params.set("sentiment", sentimentFilter);
+      if (sentiment !== "All") params.set("sentiment", sentiment);
+      if (threshold !== null) params.set("link_threshold", threshold.toString());
+      Object.entries(entityFilters)
+        .filter(([, isOn]) => isOn)
+        .forEach(([key]) => params.append("entity_types", key));
+
+      const response = await fetch(`/api/articles/${articleId}/associations?${params.toString()}`);
+      const json = (await response.json()) as AssociationsResponseV2;
+      if (!response.ok) {
+        setError((json as { error?: string }).error || "Failed to load associations");
+        setData(null);
+        return;
       }
-      const activeTypes = Object.entries(entityFilters)
-        .filter(([, v]) => v)
-        .map(([k]) => k);
-      activeTypes.forEach((t) => params.append("entity_types", t));
 
-      const res = await fetch(`/api/articles/${articleId}/associations?${params}`);
-      const data = await res.json();
-
-      if (data.focusArticle) {
-        setFocusArticle(data.focusArticle);
-      }
-
-      const fetchedNodes: AssociationNode[] = data.nodes || [];
-      const fetchedEdges: AssociationEdge[] = data.edges || [];
-
-      // Always reset to level 1 on filter change (simple, predictable)
-      const finalNodes = fetchedNodes;
-      const finalEdges = fetchedEdges;
-      setMaxLevel(1);
-
-      // Cache initial state for reset button
-      initialNodesRef.current = finalNodes;
-      initialEdgesRef.current = finalEdges;
-
-      allNodesRef.current = finalNodes;
-      allEdgesRef.current = finalEdges;
-      setAllNodes(finalNodes);
-      setAllEdges(finalEdges);
-      setNodes(finalNodes);
-      setEdges(finalEdges);
+      setData(json);
+      setSelectedGraphNode(null);
+      setActiveTraceRoot((prev) => prev || json.related_events[0]?.article_id || null);
     } catch {
-      // keep empty
+      setError("Failed to load associations");
+      setData(null);
     } finally {
       setLoading(false);
     }
-  }, [articleId, timeWindow, sentimentFilter, entityFilters, linkThreshold]);
+  }, [articleId, timeWindow, mode, view, depth, sentiment, threshold, entityFilters]);
 
   useEffect(() => {
     fetchAssociations();
   }, [fetchAssociations]);
 
-  function toggleEntity(type: EntityType) {
-    setEntityFilters((prev) => ({ ...prev, [type]: !prev[type] }));
-  }
-
-  function handleResetGraph() {
-    const resetNodes = initialNodesRef.current;
-    const resetEdges = initialEdgesRef.current;
-    allNodesRef.current = resetNodes;
-    allEdgesRef.current = resetEdges;
-    setAllNodes(resetNodes);
-    setAllEdges(resetEdges);
-    setNodes(resetNodes);
-    setEdges(resetEdges);
-    setMaxLevel(1);
-    setSelectedNode(null);
-  }
-
-  async function handleExpand(nodeId: string) {
-    // Find the node's article ID
-    const node = allNodes.find((n) => n.id === nodeId);
-    if (!node) return;
-
-    // The articleId for expansion - for expanded nodes we stored it
-    const expandArticleId = (node as AssociationNode & { articleId?: string }).articleId;
-    if (!expandArticleId) return;
-
-    try {
-      const params = new URLSearchParams({
-        time_window: timeWindow,
-        link_threshold: linkThreshold.toString(),
-      });
-      if (sentimentFilter !== "All") {
-        params.set("sentiment", sentimentFilter);
-      }
-
-      const res = await fetch(`/api/articles/${expandArticleId}/associations?${params}`);
-      const data = await res.json();
-
-      const newNodes: AssociationNode[] = data.nodes || [];
-      const newEdges: AssociationEdge[] = data.edges || [];
-
-      const newLevel = maxLevel + 1;
-
-      // Remap IDs to avoid clashes
-      const remappedNodes = newNodes
-        .filter((n: AssociationNode) => n.type !== "focus")
-        .map((n: AssociationNode, i: number) => ({
-          ...n,
-          id: `L${newLevel}_n${i + 1}`,
-          level: newLevel,
-        }));
-
-      const remappedEdges = newEdges.map((e: AssociationEdge) => ({
-        ...e,
-        source: e.source === "focus" ? nodeId : `L${newLevel}_${e.source}`,
-        target: e.target === "focus" ? nodeId : `L${newLevel}_${e.target}`,
-        score: e.score,
-      }));
-
-      let updatedNodes = [...allNodes, ...remappedNodes];
-      let updatedEdges = [...allEdges, ...remappedEdges];
-
-      // Sliding window: if more than 3 levels, remove the oldest level
-      if (newLevel > 3) {
-        const removeLevel = newLevel - 3;
-        const removedIds = new Set(
-          updatedNodes.filter((n) => (n.level || 0) === removeLevel).map((n) => n.id)
-        );
-        // Remap edges from removed nodes → focus, then prune self-loops
-        updatedEdges = updatedEdges
-          .map((e) => ({
-            ...e,
-            source: removedIds.has(e.source) ? "focus" : e.source,
-            target: removedIds.has(e.target) ? "focus" : e.target,
-          }))
-          .filter((e) => e.source !== e.target);
-        // Remove the level nodes themselves
-        updatedNodes = updatedNodes.filter(
-          (n) => (n.level || 0) !== removeLevel || n.type === "focus"
-        );
-        // Prune any remaining dangling edges
-        const survivingIds = new Set(updatedNodes.map((n) => n.id));
-        updatedEdges = updatedEdges.filter(
-          (e) => survivingIds.has(e.source) && survivingIds.has(e.target)
-        );
-      }
-
-      allNodesRef.current = updatedNodes;
-      allEdgesRef.current = updatedEdges;
-      setAllNodes(updatedNodes);
-      setAllEdges(updatedEdges);
-      setNodes(updatedNodes);
-      setEdges(updatedEdges);
-      setMaxLevel(newLevel);
-    } catch {
-      // ignore expansion error
-    }
-  }
+  const activeTrace = useMemo(
+    () => data?.trace_paths.find((path) => path.root_event_id === activeTraceRoot) || null,
+    [data, activeTraceRoot]
+  );
 
   if (!articleId) {
     return (
       <div className="flex-1 flex items-center justify-center">
         <p className="text-slate-500">
-          Select &quot;Associations →&quot; on a news card to explore connections.
+          Select &quot;Associations →&quot; on a news card to investigate linked events.
         </p>
       </div>
     );
@@ -220,44 +116,292 @@ function AssociationsContent() {
 
   return (
     <>
-      {focusArticle && <FocusArticleBar article={focusArticle} />}
-      <main className="flex-1 flex overflow-hidden">
-        <GraphFilterPanel
-          entityFilters={entityFilters}
-          onToggleEntity={toggleEntity}
-          timeWindow={timeWindow}
-          onTimeWindowChange={setTimeWindow}
-          sentimentFilter={sentimentFilter}
-          onSentimentChange={setSentimentFilter}
-          linkThreshold={linkThreshold}
-          onThresholdChange={setLinkThreshold}
-        />
+      {data?.focus && <FocusArticleBar article={data.focus} />}
+      <main className="flex-1 overflow-y-auto bg-[#080b12] p-6">
+        <div className="max-w-7xl mx-auto space-y-6">
+          <section className="bg-[#0b0e14] border border-[#30363d] rounded-xl p-4">
+            <div className="flex flex-wrap items-center gap-3 justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                {TIME_WINDOWS.map((tw) => (
+                  <button
+                    key={tw}
+                    onClick={() => setTimeWindow(tw)}
+                    className={
+                      timeWindow === tw
+                        ? "px-3 py-1.5 text-[11px] font-semibold rounded border border-cyan-500/40 bg-cyan-500/10 text-cyan-300"
+                        : "px-3 py-1.5 text-[11px] font-semibold rounded border border-[#30363d] text-slate-400 hover:text-white"
+                    }
+                  >
+                    {tw}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {MODE_OPTIONS.map((option) => (
+                  <button
+                    key={option}
+                    onClick={() => setMode(option)}
+                    className={
+                      mode === option
+                        ? "px-3 py-1.5 text-[11px] font-semibold rounded border border-amber-500/40 bg-amber-500/10 text-amber-300"
+                        : "px-3 py-1.5 text-[11px] font-semibold rounded border border-[#30363d] text-slate-400 hover:text-white"
+                    }
+                  >
+                    {titleCase(option)}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setView("evidence")}
+                  className={
+                    view === "evidence"
+                      ? "px-3 py-1.5 text-[11px] font-semibold rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                      : "px-3 py-1.5 text-[11px] font-semibold rounded border border-[#30363d] text-slate-400 hover:text-white"
+                  }
+                >
+                  Evidence
+                </button>
+                <button
+                  onClick={() => setView("graph")}
+                  className={
+                    view === "graph"
+                      ? "px-3 py-1.5 text-[11px] font-semibold rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                      : "px-3 py-1.5 text-[11px] font-semibold rounded border border-[#30363d] text-slate-400 hover:text-white"
+                  }
+                >
+                  Graph
+                </button>
+                <button
+                  onClick={() => setShowAdvanced((prev) => !prev)}
+                  className="px-3 py-1.5 text-[11px] font-semibold rounded border border-[#30363d] text-slate-300 hover:text-white"
+                >
+                  {showAdvanced ? "Hide Advanced" : "Advanced"}
+                </button>
+              </div>
+            </div>
 
-        {loading ? (
-          <div className="flex-1 flex items-center justify-center bg-[#0b0e14]">
-            <div className="text-slate-500 text-sm">Loading association graph...</div>
-          </div>
-        ) : (
-          <div className="flex-1 relative">
-            {filterResetNotice && (
-              <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-amber-500/10 border border-amber-500/30 text-amber-400 font-mono text-[11px] px-4 py-2 rounded-lg backdrop-blur-sm">
-                Filters updated — graph reset to level 1
+            {showAdvanced && (
+              <div className="mt-4 pt-4 border-t border-[#1f2731] grid md:grid-cols-3 gap-5">
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">Sentiment</div>
+                  <div className="flex gap-2 flex-wrap">
+                    {SENTIMENT_OPTIONS.map((option) => (
+                      <button
+                        key={option}
+                        onClick={() => setSentiment(option)}
+                        className={
+                          sentiment === option
+                            ? "px-2 py-1 text-[11px] rounded border border-cyan-500/40 bg-cyan-500/10 text-cyan-300"
+                            : "px-2 py-1 text-[11px] rounded border border-[#30363d] text-slate-400"
+                        }
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">Entity Types</div>
+                  <div className="flex gap-2 flex-wrap">
+                    {ENTITY_TYPES.map((entityType) => (
+                      <button
+                        key={entityType}
+                        onClick={() =>
+                          setEntityFilters((prev) => ({
+                            ...prev,
+                            [entityType]: !prev[entityType],
+                          }))
+                        }
+                        className={
+                          entityFilters[entityType]
+                            ? "px-2 py-1 text-[11px] rounded border border-amber-500/40 bg-amber-500/10 text-amber-300 capitalize"
+                            : "px-2 py-1 text-[11px] rounded border border-[#30363d] text-slate-500 capitalize"
+                        }
+                      >
+                        {entityType}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+                    <span>Manual Threshold</span>
+                    <span>{threshold === null ? "Preset" : threshold.toFixed(2)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.3"
+                    max="0.95"
+                    step="0.05"
+                    value={threshold ?? 0.55}
+                    onChange={(e) => setThreshold(Number.parseFloat(e.target.value))}
+                    className="w-full"
+                  />
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      onClick={() => setThreshold(null)}
+                      className="px-2 py-1 text-[10px] rounded border border-[#30363d] text-slate-400"
+                    >
+                      Use Mode Default
+                    </button>
+                    <button
+                      onClick={() => setDepth((prev) => (prev % 3) + 1)}
+                      className="px-2 py-1 text-[10px] rounded border border-[#30363d] text-slate-300"
+                    >
+                      Trace Depth: {depth}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
-            <AssociationGraph
-              nodes={nodes}
-              edges={edges}
-              onNodeClick={setSelectedNode}
-              onResetGraph={handleResetGraph}
-            />
-          </div>
-        )}
+          </section>
 
-        <GraphDetailPanel
-          node={selectedNode}
-          onExpand={handleExpand}
-          onClose={() => setSelectedNode(null)}
-        />
+          {loading ? (
+            <section className="h-72 rounded-xl border border-[#30363d] bg-[#0b0e14] flex items-center justify-center text-slate-500 text-sm">
+              Loading investigation view...
+            </section>
+          ) : error ? (
+            <section className="h-72 rounded-xl border border-rose-500/30 bg-rose-500/5 flex items-center justify-center text-rose-300 text-sm">
+              {error}
+            </section>
+          ) : !data ? null : (
+            <section className="grid lg:grid-cols-[1.2fr_1fr] gap-5">
+              <div className="bg-[#0b0e14] border border-[#30363d] rounded-xl p-4 min-h-[560px]">
+                {view === "graph" ? (
+                  <div className="relative h-[560px] rounded-lg overflow-hidden border border-[#1f2731]">
+                    <AssociationGraph
+                      nodes={data.nodes || []}
+                      edges={data.edges || []}
+                      onNodeClick={setSelectedGraphNode}
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-sm font-bold text-white tracking-wide">Step 2: Top Linked Events</h2>
+                      <span className="text-[11px] text-slate-500">
+                        {data.related_events.length} results • {data.scoring_version}
+                      </span>
+                    </div>
+                    {data.related_events.length === 0 ? (
+                      <div className="h-56 border border-[#1f2731] rounded-lg flex items-center justify-center text-slate-500 text-sm">
+                        No linked events for these parameters.
+                      </div>
+                    ) : (
+                      data.related_events.map((event, index) => (
+                        <div
+                          key={event.article_id}
+                          className="border border-[#1f2731] rounded-lg p-3 bg-[#0e1219] hover:border-[#38506a]"
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <div className="text-[10px] text-slate-500 mb-1">
+                                #{index + 1} • {event.source || "Unknown source"} • {formatDate(event.published_at)}
+                              </div>
+                              <h3 className="text-sm font-semibold text-white leading-snug">{event.headline}</h3>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <div className="text-xs font-semibold text-amber-300">{event.link_score.toFixed(2)}</div>
+                              <SentimentBadge sentiment={event.sentiment} />
+                            </div>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {event.explanation.map((line) => (
+                              <span
+                                key={line}
+                                className="px-2 py-1 rounded text-[10px] border border-[#2a3441] text-slate-300"
+                              >
+                                {line}
+                              </span>
+                            ))}
+                          </div>
+                          <button
+                            onClick={() => setActiveTraceRoot(event.article_id)}
+                            className="mt-3 text-[11px] text-cyan-300 hover:text-cyan-200"
+                          >
+                            View trace contributors
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <aside className="bg-[#0b0e14] border border-[#30363d] rounded-xl p-4 min-h-[560px]">
+                {view === "graph" ? (
+                  <div>
+                    <h2 className="text-sm font-bold text-white tracking-wide mb-3">Graph Node Details</h2>
+                    {selectedGraphNode ? (
+                      <div className="space-y-3">
+                        <div className="text-[10px] text-slate-500">
+                          {selectedGraphNode.source || "Unknown source"} • {selectedGraphNode.date}
+                        </div>
+                        <h3 className="text-sm font-semibold text-white">{selectedGraphNode.headline}</h3>
+                        {selectedGraphNode.summary && (
+                          <p className="text-[12px] text-slate-300 leading-relaxed">{selectedGraphNode.summary}</p>
+                        )}
+                        <div className="grid grid-cols-2 gap-2 text-[11px]">
+                          <div className="border border-[#1f2731] rounded p-2 text-slate-300">
+                            Link Score: <span className="text-amber-300">{selectedGraphNode.linkScore.toFixed(2)}</span>
+                          </div>
+                          <div className="border border-[#1f2731] rounded p-2 text-slate-300">
+                            Magnitude: <span className="text-amber-300">{selectedGraphNode.magnitude}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="h-56 border border-[#1f2731] rounded-lg flex items-center justify-center text-slate-500 text-sm">
+                        Select a node to inspect its evidence context.
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <h2 className="text-sm font-bold text-white tracking-wide mb-1">Step 3: Trace Path</h2>
+                    <p className="text-[11px] text-slate-500 mb-4">
+                      Chain of prior events used to explain the selected linked event.
+                    </p>
+                    {!activeTrace ? (
+                      <div className="h-56 border border-[#1f2731] rounded-lg flex items-center justify-center text-slate-500 text-sm">
+                        Select a linked event to load a trace path.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="text-[11px] text-slate-400">
+                          Path Score: <span className="text-cyan-300">{activeTrace.total_score.toFixed(2)}</span>
+                        </div>
+                        {activeTrace.nodes.map((node, idx) => (
+                          <div key={`${activeTrace.path_id}_${node.article_id}`} className="relative pl-6">
+                            {idx < activeTrace.nodes.length - 1 && (
+                              <div className="absolute left-[7px] top-4 bottom-[-18px] w-px bg-[#2a3441]" />
+                            )}
+                            <div className="absolute left-0 top-1 w-3.5 h-3.5 rounded-full bg-cyan-500/80" />
+                            <div className="border border-[#1f2731] rounded-lg p-3 bg-[#0e1219]">
+                              <div className="text-[10px] text-slate-500 mb-1">
+                                {formatDate(node.published_at)} • {node.source || "Unknown source"}
+                              </div>
+                              <div className="text-sm font-medium text-white leading-snug">{node.headline}</div>
+                              <div className="mt-1 text-[11px] text-slate-400">{node.why_it_matters}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="mt-5 pt-4 border-t border-[#1f2731] text-[11px] text-slate-500">
+                  Applied: {data.applied_params.time_window} • {titleCase(data.applied_params.mode)} • depth{" "}
+                  {data.applied_params.depth}
+                </div>
+              </aside>
+            </section>
+          )}
+        </div>
       </main>
     </>
   );
