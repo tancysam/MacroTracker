@@ -1,3 +1,8 @@
+export interface MarketImpact {
+  asset: string;
+  direction: "up" | "down" | "mixed";
+}
+
 export interface Article {
   id: string;
   url: string;
@@ -18,6 +23,7 @@ export interface Article {
   entities_companies: string[];
   entities_policies: string[];
   embedding?: number[];
+  market_impacts: MarketImpact[] | null;
 }
 
 export interface HeatScoreEntry {

@@ -28,6 +28,7 @@ export interface ExtractionResult {
   magnitude: number;
   primary_topic_key: string;
   primary_topic_display: string;
+  market_impacts: { asset: string; direction: "up" | "down" | "mixed" }[];
 }
 
 export async function extractArticleMetadata(
@@ -53,6 +54,7 @@ Return a JSON object with these exact fields:
 - magnitude: number (0-10) — significance/impact score
 - primary_topic_key: string — the single most-mentioned entity tag across all entity types
 - primary_topic_display: string — a human-readable topic name derived from the most-mentioned entity (e.g., "Federal Reserve Rate Policy")
+- market_impacts: array of 1-5 objects, each with { asset: string, direction: "up" | "down" | "mixed" }. Identify which financial assets/indices are most likely impacted and in which direction. Use ONLY these canonical asset names: "S&P 500", "US 10Y Yield", "EUR/USD", "Gold", "Brent Crude", "DXY Index", "Tech Stocks", "Defense Stocks", "Bank Stocks", "Bitcoin", "VIX". Return an empty array if no clear market impact.
 
 IMPORTANT: Do NOT include news agencies, wire services, or media organizations (e.g., Reuters, Bloomberg, AP, CNBC) in any entity category.`,
       },
