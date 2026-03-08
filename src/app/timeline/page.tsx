@@ -15,6 +15,7 @@ function TimelineContent() {
   const [loading, setLoading] = useState(true);
   const [sentimentFilter, setSentimentFilter] = useState<Sentiment | "All">("All");
   const [topicDisplay, setTopicDisplay] = useState(topic);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
 
   const fetchArticles = useCallback(async () => {
     if (!topic) return;
@@ -29,7 +30,6 @@ function TimelineContent() {
       const fetched = data.articles || [];
       setArticles(fetched);
 
-      // Use the first article's primary_topic_display if available
       if (fetched.length > 0 && fetched[0].primary_topic_display) {
         setTopicDisplay(fetched[0].primary_topic_display);
       }
@@ -66,15 +66,19 @@ function TimelineContent() {
         </div>
       </div>
 
-      {/* Chart */}
+      {/* Chart — wired up to card highlighting */}
       <div className="mb-12">
         <PriceChart
           topic={topic}
           articles={articles.map((a) => ({
+            id: a.id,
             published_at: a.published_at,
             headline: a.headline,
             sentiment: a.sentiment,
           }))}
+          onBubbleClick={(id) => setHighlightedId(id)}
+          onBubbleHover={(id) => setHighlightedId(id)}
+          hoveredArticleId={highlightedId}
         />
       </div>
 
@@ -121,7 +125,12 @@ function TimelineContent() {
             {/* Axis Line */}
             <div className="absolute left-[18px] top-0 bottom-0 w-[2px] bg-slate-800" />
             {articles.map((article) => (
-              <TimelineCard key={article.id} article={article} />
+              <TimelineCard
+                key={article.id}
+                article={article}
+                isHighlighted={highlightedId === article.id}
+                onHover={(id) => setHighlightedId(id)}
+              />
             ))}
           </div>
         )}

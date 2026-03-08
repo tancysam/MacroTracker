@@ -7,12 +7,10 @@ import SentimentBadge from "./SentimentBadge";
 
 export default function NewsCard({ article }: { article: Article }) {
   const allEntities = [
-    ...new Set([
-      ...article.entities_topics,
-      ...article.entities_markets,
-      ...article.entities_companies,
-      ...article.entities_policies,
-    ])
+    ...(article.entities_topics || []),
+    ...(article.entities_markets || []),
+    ...(article.entities_companies || []),
+    ...(article.entities_policies || []),
   ].slice(0, 4);
 
   const timeAgo = formatDistanceToNow(new Date(article.published_at), { addSuffix: true });
@@ -20,7 +18,7 @@ export default function NewsCard({ article }: { article: Article }) {
   return (
     <div
       className="bg-slate-900/20 p-5 rounded-xl border border-slate-800/50 shadow-sm hover:border-[#00d4ff]/50 transition-all cursor-pointer group"
-      onClick={() => window.open(article.url, '_blank', 'noopener,noreferrer')}
+      onClick={() => window.open(article.url, "_blank", "noopener,noreferrer")}
     >
       <div className="flex gap-6">
         {article.image_url && (
