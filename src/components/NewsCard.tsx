@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import type { Article } from "@/lib/types";
+import { getMarketImpacts } from "@/lib/getMarketImpacts";
 import SentimentBadge from "./SentimentBadge";
 
 export default function NewsCard({ article }: { article: Article }) {
+  const impacts = getMarketImpacts(article);
+
   const allEntities = [
     ...(article.entities_topics || []),
     ...(article.entities_markets || []),
@@ -48,6 +51,24 @@ export default function NewsCard({ article }: { article: Article }) {
           <h3 className="text-lg font-bold text-white leading-tight mb-2 group-hover:text-[#00d4ff] transition-colors truncate">
             {article.headline}
           </h3>
+          {article.summary && (
+            <p className="text-sm text-slate-400 line-clamp-2 mb-2">{article.summary}</p>
+          )}
+          {impacts.length > 0 && (
+            <div className="mb-2">
+              <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Potential Market Impacts</span>
+              <div className="flex flex-wrap gap-1.5 mt-1">
+                {impacts.map((i) => (
+                  <span key={i.asset} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800/80 border border-slate-700/50">
+                    <span className={i.direction === "up" ? "text-emerald-400" : i.direction === "down" ? "text-red-400" : "text-amber-400"}>
+                      {i.direction === "up" ? "▲" : i.direction === "down" ? "▼" : "◆"}
+                    </span>
+                    <span className="text-slate-300">{i.asset}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <div className="flex flex-wrap gap-2">
               {allEntities.map((tag) => (
