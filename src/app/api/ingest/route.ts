@@ -4,7 +4,7 @@ import { getServiceClient } from "@/lib/supabase";
 import { fetchGeneralNews } from "@/lib/finnhub";
 import { extractArticleMetadata, generateEmbedding } from "@/lib/openai";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 export async function POST() {
@@ -12,7 +12,7 @@ export async function POST() {
     const supabase = getServiceClient();
     const news = await fetchGeneralNews();
 
-    const results = { inserted: 0, skipped: 0, filtered: 0, errors: 0 };
+    const results = { inserted: 0, skipped: 0, filtered: 0, errors: 0, errorSamples: [] as string[] };
 
     // Process in batches of 10
     const batchSize = 10;
@@ -114,7 +114,10 @@ export async function POST() {
             }
 
             results.inserted++;
-          } catch {
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error("[ingest] article error:", msg);
+            if (results.errorSamples.length < 3) results.errorSamples.push(msg);
             results.errors++;
           }
         })

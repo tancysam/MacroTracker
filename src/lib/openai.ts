@@ -35,8 +35,7 @@ export async function extractArticleMetadata(
   summary: string
 ): Promise<ExtractionResult> {
   const response = await getOpenAI().chat.completions.create({
-    model: "gpt-4o-mini",
-    temperature: 0,
+    model: "gpt-5-nano-2025-08-07",
     response_format: { type: "json_object" },
     messages: [
       {
@@ -44,11 +43,11 @@ export async function extractArticleMetadata(
         content: `You are a financial news analyst. Extract structured metadata from the given news article.
 
 Return a JSON object with these exact fields:
-- is_relevant: boolean — Set to TRUE only if this is a concrete, factual news article with direct financial market implications: economic data releases, central bank decisions, corporate earnings/M&A/IPOs, regulatory rulings, commodity/currency moves, or geopolitical events that affect asset prices. Set to FALSE for: opinion pieces, advice columns, listicles, lifestyle or health content, personal finance tips, vague weekly recaps without specific data/events, and any article whose primary purpose is commentary or entertainment rather than reporting a concrete event. Examples of FALSE: "3 confidence-building tools for parents", "When to talk to AI about mental health", "Here are 3 themes that drove another challenging week on Wall Street". Examples of TRUE: "Fed raises rates by 25bps", "Apple beats Q3 earnings estimates", "OPEC+ cuts output by 1M barrels/day".
+- is_relevant: boolean — Determined ONLY from the Headline field. Ignore the Summary entirely for this field. Set to TRUE for headlines that make a SPECIFIC financial claim — naming a company, instrument, policy event, data release, or geopolitical event (e.g., a rate decision, earnings beat, tariff, war escalation). Set to FALSE for: (a) lifestyle/health/parenting/entertainment/personal finance articles; (b) vague market commentary or listicle-style roundups that contain no specific named entity or event — e.g., "Here are N themes/things/reasons..." headlines. Examples of FALSE: "3 confidence-building tools for parents", "When to talk to AI about mental health", "10 ways to save money on groceries", "Here are 3 themes that drove another challenging week on Wall Street", "Here are the 4 big things we’re watching in the stock market in the week ahead". Examples of TRUE: "Fed raises rates by 25bps", "Apple beats Q3 earnings estimates", "OPEC+ cuts output by 1M barrels/day", "Markets close mixed amid trade uncertainty", "US imposes new sanctions on Iran", "China responds to US tariffs with counter-measures", "Middle East conflict escalates as ceasefire collapses", "White House signs executive order on AI regulation".
 - entities_topics: string[] — Specific thematic categories tied to a named event or policy shift (e.g., "Fed Rate Hike", "US-China Trade Tensions", "Oil Supply Cut", "Banking Crisis", "NATO Expansion", "Middle East Conflict"). Do NOT include vague umbrella terms like "Geopolitics", "Global Markets", or "Economy".
 - entities_markets: string[] — Financial instruments/assets (e.g., "S&P 500", "Brent Crude", "US 10Y Yield")
 - entities_people: string[] — Named individuals (e.g., "Jerome Powell", "Christine Lagarde")
-- entities_companies: string[] — Corporations/institutions (e.g., "Goldman Sachs", "Federal Reserve", "ECB")
+- entities_companies: string[] — Corporations/institutions/Countries (e.g., "Goldman Sachs", "Federal Reserve", "ECB", "China", "United States", "Australia")
 - entities_policies: string[] — Policy types (e.g., "Rate Hike", "QE", "Tariffs")
 - sentiment: "Bullish" | "Bearish" | "Neutral" — market outlook
 - magnitude: number (0-10) — significance/impact score

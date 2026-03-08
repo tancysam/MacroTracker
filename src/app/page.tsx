@@ -12,6 +12,16 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [selectedTopic, setSelectedTopic] = useState("All News");
   const [sortMode, setSortMode] = useState<SortMode>("composite");
+  const [ingesting, setIngesting] = useState(false);
+  const [ingestResult, setIngestResult] = useState<{
+    success: boolean;
+    total?: number;
+    inserted?: number;
+    skipped?: number;
+    filtered?: number;
+    errors?: number;
+    error?: string;
+  } | null>(null);
 
   const fetchArticles = useCallback(async () => {
     setLoading(true);
@@ -33,6 +43,21 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchArticles();
   }, [fetchArticles]);
+
+  const runIngest = async () => {
+    setIngesting(true);
+    setIngestResult(null);
+    try {
+      const res = await fetch("/api/ingest", { method: "POST" });
+      const data = await res.json();
+      setIngestResult(data);
+      if (data.success) fetchArticles();
+    } catch {
+      setIngestResult({ success: false, error: "Network error" });
+    } finally {
+      setIngesting(false);
+    }
+  };
 
   const sortModes: { key: SortMode; label: string }[] = [
     { key: "heatscore", label: "HeatScore" },
@@ -56,22 +81,73 @@ export default function DashboardPage() {
               <h2 className="text-2xl font-black text-white tracking-tight">
                 Trending Global News
               </h2>
-              <div className="flex items-center gap-1 bg-slate-900/50 border border-slate-800 p-1 rounded-lg">
-                {sortModes.map((mode) => (
-                  <button
-                    key={mode.key}
-                    onClick={() => setSortMode(mode.key)}
-                    className={
-                      sortMode === mode.key
-                        ? "px-3 py-1 text-[10px] font-bold bg-[#00d4ff]/20 text-[#00d4ff] rounded"
-                        : "px-3 py-1 text-[10px] font-bold text-slate-500 hover:text-white transition-colors"
-                    }
-                  >
-                    {mode.label}
-                  </button>
-                ))}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1 bg-slate-900/50 border border-slate-800 p-1 rounded-lg">
+                  {sortModes.map((mode) => (
+                    <button
+                      key={mode.key}
+                      onClick={() => setSortMode(mode.key)}
+                      className={
+                        sortMode === mode.key
+                          ? "px-3 py-1 text-[10px] font-bold bg-[#00d4ff]/20 text-[#00d4ff] rounded"
+                          : "px-3 py-1 text-[10px] font-bold text-slate-500 hover:text-white transition-colors"
+                      }
+                    >
+                      {mode.label}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={runIngest}
+                  disabled={ingesting}
+                  className="px-3 py-1.5 text-[10px] font-bold rounded-lg border border-slate-700 bg-slate-900/50 text-slate-300 hover:text-white hover:border-slate-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {ingesting ? "Ingesting..." : "Run Ingest"}
+                </button>
               </div>
             </div>
+
+            {ingestResult && (
+              <div
+                className={`relative rounded-xl border p-4 text-sm ${
+                  ingestResult.success
+                    ? "border-green-700/50 bg-green-950/30"
+                    : "border-red-700/50 bg-red-950/30"
+                }`}
+              >
+                <button
+                  onClick={() => setIngestResult(null)}
+                  className="absolute top-3 right-3 text-slate-500 hover:text-white text-base leading-none"
+                >
+                  ✕
+                </button>
+                {ingestResult.success ? (
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {[
+                      { label: "Total", value: ingestResult.total },
+                      { label: "Inserted", value: ingestResult.inserted },
+                      { label: "Skipped", value: ingestResult.skipped },
+                      { label: "Filtered", value: ingestResult.filtered },
+                      { label: "Errors", value: ingestResult.errors },
+                    ].map(({ label, value }) => (
+                      <div
+                        key={label}
+                        className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800/60 border border-slate-700"
+                      >
+                        <span className="text-slate-400 text-[10px] font-semibold uppercase tracking-wide">
+                          {label}
+                        </span>
+                        <span className="text-white font-bold">{value ?? 0}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-red-400 font-medium">
+                    {ingestResult.error ?? "Ingest failed"}
+                  </p>
+                )}
+              </div>
+            )}
 
             {loading ? (
               <div className="space-y-4">
