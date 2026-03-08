@@ -51,6 +51,7 @@ export interface AssociationNode {
     sentiment: number;
   };
   level: number;
+  articleId?: string;
   // D3 SimulationNodeDatum fields
   index?: number;
   x?: number;
@@ -65,6 +66,7 @@ export interface AssociationEdge {
   source: string;
   target: string;
   score: number;
+  sharedEntities?: string[];
 }
 
 export interface MarketCandle {

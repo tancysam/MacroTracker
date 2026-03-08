@@ -136,31 +136,25 @@ export default function GraphFilterPanel({
         </div>
       </section>
 
-      {/* LinkScore Formula */}
+      {/* Node Color Legend */}
       <section className="mb-8">
         <h3 className="font-mono text-[10px] text-slate-500 tracking-[0.15em] uppercase mb-3">
-          LinkScore Formula
+          Node Colors
         </h3>
-        <div className="space-y-2">
-          {[
-            { label: "Semantic", pct: "40%", color: "#60a5fa" },
-            { label: "Entity Overlap", pct: "30%", color: "#a78bfa" },
-            { label: "Magnitude Proximity", pct: "20%", color: "#34d399" },
-            { label: "Sentiment Alignment", pct: "10%", color: "#fb923c" },
-          ].map(({ label, pct, color }) => (
-            <div key={label} className="flex items-center gap-2">
-              <div className="w-1 h-8 rounded-full shrink-0" style={{ backgroundColor: color }} />
-              <div className="flex-1">
-                <div className="flex justify-between items-center mb-0.5">
-                  <span className="font-mono text-[9px] text-slate-400">{label}</span>
-                  <span className="font-mono text-[9px] text-slate-500">{pct}</span>
-                </div>
-                <div className="h-1 bg-[#161b22] rounded-full overflow-hidden">
-                  <div className="h-full rounded-full" style={{ width: pct, backgroundColor: color, opacity: 0.5 }} />
-                </div>
-              </div>
+        <div className="grid grid-cols-2 gap-2">
+          {entityTypes.map((type) => (
+            <div key={type} className="flex items-center gap-2">
+              <div
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ backgroundColor: ENTITY_TYPE_COLORS[type] }}
+              />
+              <span className="font-mono text-[9px] text-slate-400 capitalize">{type}</span>
             </div>
           ))}
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full shrink-0 bg-amber-500" />
+            <span className="font-mono text-[9px] text-slate-400">Focus</span>
+          </div>
         </div>
       </section>
 

@@ -1,19 +1,21 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { Article } from "@/lib/types";
 import SentimentBadge from "./SentimentBadge";
 
 export default function FocusArticleBar({ article }: { article: Article }) {
+  const router = useRouter();
+
   return (
     <div className="bg-[#0b0e14] border-b border-[#30363d] px-8 py-3 flex items-center gap-6 shrink-0">
-      <Link
-        href="/"
+      <button
+        onClick={() => router.back()}
         className="text-slate-400 hover:text-white transition-colors flex items-center gap-2 text-xs font-semibold shrink-0"
       >
         <span className="material-symbols-outlined text-sm">arrow_back</span>
         Back
-      </Link>
+      </button>
       <div className="w-px h-6 bg-[#30363d] shrink-0" />
       <div className="flex items-center gap-2.5 shrink-0">
         <div className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_8px_#f59e0b]" />

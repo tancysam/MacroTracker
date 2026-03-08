@@ -28,17 +28,20 @@ function AssociationsContent() {
   });
   const [timeWindow, setTimeWindow] = useState<TimeWindow>("1M");
   const [sentimentFilter, setSentimentFilter] = useState<Sentiment | "All">("All");
-  const [linkThreshold, setLinkThreshold] = useState(0.4);
+  const [linkThreshold, setLinkThreshold] = useState(0.5);
 
   // Expansion state: track levels and all accumulated nodes/edges
   const [allNodes, setAllNodes] = useState<AssociationNode[]>([]);
   const [allEdges, setAllEdges] = useState<AssociationEdge[]>([]);
   const [maxLevel, setMaxLevel] = useState(0);
+  const [filterResetNotice, setFilterResetNotice] = useState(false);
 
   // Refs for stable access in filter-change fetch (avoid stale closures)
   const allNodesRef = useRef<AssociationNode[]>([]);
   const allEdgesRef = useRef<AssociationEdge[]>([]);
   const prevArticleIdRef = useRef<string>("");
+  const initialNodesRef = useRef<AssociationNode[]>([]);
+  const initialEdgesRef = useRef<AssociationEdge[]>([]);
 
   const fetchAssociations = useCallback(async () => {
     if (!articleId) return;
@@ -48,6 +51,13 @@ function AssociationsContent() {
     if (isNewArticle) {
       prevArticleIdRef.current = articleId;
       setSelectedNode(null);
+    }
+
+    // When filters change while expanded, reset to level 1
+    const wasExpanded = !isNewArticle && allNodesRef.current.some((n) => (n.level || 0) >= 2);
+    if (wasExpanded) {
+      setFilterResetNotice(true);
+      setTimeout(() => setFilterResetNotice(false), 3000);
     }
 
     try {
@@ -73,29 +83,14 @@ function AssociationsContent() {
       const fetchedNodes: AssociationNode[] = data.nodes || [];
       const fetchedEdges: AssociationEdge[] = data.edges || [];
 
-      let finalNodes: AssociationNode[];
-      let finalEdges: AssociationEdge[];
+      // Always reset to level 1 on filter change (simple, predictable)
+      const finalNodes = fetchedNodes;
+      const finalEdges = fetchedEdges;
+      setMaxLevel(1);
 
-      if (isNewArticle) {
-        finalNodes = fetchedNodes;
-        finalEdges = fetchedEdges;
-        setMaxLevel(1);
-      } else {
-        // Preserve level >= 2 expanded nodes across filter changes
-        const expandedNodes = allNodesRef.current.filter((n) => (n.level || 0) >= 2);
-        finalNodes = [...fetchedNodes, ...expandedNodes];
-        const survivingIds = new Set(finalNodes.map((n) => n.id));
-        const expandedIds = new Set(expandedNodes.map((n) => n.id));
-        finalEdges = [
-          ...fetchedEdges,
-          ...allEdgesRef.current.filter(
-            (e) =>
-              survivingIds.has(e.source) &&
-              survivingIds.has(e.target) &&
-              (expandedIds.has(e.source) || expandedIds.has(e.target))
-          ),
-        ];
-      }
+      // Cache initial state for reset button
+      initialNodesRef.current = finalNodes;
+      initialEdgesRef.current = finalEdges;
 
       allNodesRef.current = finalNodes;
       allEdgesRef.current = finalEdges;
@@ -116,6 +111,19 @@ function AssociationsContent() {
 
   function toggleEntity(type: EntityType) {
     setEntityFilters((prev) => ({ ...prev, [type]: !prev[type] }));
+  }
+
+  function handleResetGraph() {
+    const resetNodes = initialNodesRef.current;
+    const resetEdges = initialEdgesRef.current;
+    allNodesRef.current = resetNodes;
+    allEdgesRef.current = resetEdges;
+    setAllNodes(resetNodes);
+    setAllEdges(resetEdges);
+    setNodes(resetNodes);
+    setEdges(resetEdges);
+    setMaxLevel(1);
+    setSelectedNode(null);
   }
 
   async function handleExpand(nodeId: string) {
@@ -230,11 +238,19 @@ function AssociationsContent() {
             <div className="text-slate-500 text-sm">Loading association graph...</div>
           </div>
         ) : (
-          <AssociationGraph
-            nodes={nodes}
-            edges={edges}
-            onNodeClick={setSelectedNode}
-          />
+          <div className="flex-1 relative">
+            {filterResetNotice && (
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-amber-500/10 border border-amber-500/30 text-amber-400 font-mono text-[11px] px-4 py-2 rounded-lg backdrop-blur-sm">
+                Filters updated — graph reset to level 1
+              </div>
+            )}
+            <AssociationGraph
+              nodes={nodes}
+              edges={edges}
+              onNodeClick={setSelectedNode}
+              onResetGraph={handleResetGraph}
+            />
+          </div>
         )}
 
         <GraphDetailPanel

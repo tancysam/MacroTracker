@@ -2,11 +2,18 @@
 
 import type { AssociationNode } from "@/lib/types";
 import { ENTITY_TYPE_COLORS } from "@/lib/constants";
+import SentimentBadge from "./SentimentBadge";
 
 interface GraphDetailPanelProps {
   node: AssociationNode | null;
   onExpand: (nodeId: string) => void;
   onClose: () => void;
+}
+
+function getSentimentLabel(val: number): "Bullish" | "Bearish" | "Neutral" {
+  if (val > 0.3) return "Bullish";
+  if (val < -0.3) return "Bearish";
+  return "Neutral";
 }
 
 export default function GraphDetailPanel({ node, onExpand, onClose }: GraphDetailPanelProps) {
@@ -26,19 +33,9 @@ export default function GraphDetailPanel({ node, onExpand, onClose }: GraphDetai
   }
 
   const color = ENTITY_TYPE_COLORS[node.type] || ENTITY_TYPE_COLORS.focus;
-
-  function getSentimentColor(val: number) {
-    if (val < -0.4) return "#f43f5e";
-    if (val > 0.3) return "#10b981";
-    return "#94a3b8";
-  }
-
-  const sentimentNum =
-    node.sentiment === undefined
-      ? 0
-      : typeof node.sentiment === "number"
-        ? node.sentiment
-        : 0;
+  const sentimentNum = typeof node.sentiment === "number" ? node.sentiment : 0;
+  const sentimentLabel = getSentimentLabel(sentimentNum);
+  const isFocus = node.type === "focus";
 
   return (
     <aside className="w-80 bg-[#0b0e14] border-l border-[#30363d] flex flex-col p-6 overflow-y-auto shrink-0">
@@ -51,7 +48,7 @@ export default function GraphDetailPanel({ node, onExpand, onClose }: GraphDetai
           {node.type}
         </span>
         <span className="ml-auto font-mono text-amber-500 font-bold">
-          {node.type === "focus" ? "FOCUS" : node.linkScore.toFixed(2)}
+          {isFocus ? "FOCUS" : node.linkScore.toFixed(2)}
         </span>
       </div>
 
@@ -72,44 +69,56 @@ export default function GraphDetailPanel({ node, onExpand, onClose }: GraphDetai
           <div className="font-mono text-[8px] text-slate-600 tracking-tighter uppercase">Magnitude</div>
         </div>
         <div className="bg-[#080b0f] border border-[#1e2530] rounded p-3 text-center">
-          <div
-            className="text-xl font-bold mb-1"
-            style={{ color: getSentimentColor(sentimentNum) }}
-          >
-            {sentimentNum > 0 ? "+" : ""}
-            {sentimentNum.toFixed(1)}
+          <div className="mb-1 flex justify-center">
+            <SentimentBadge sentiment={sentimentLabel} />
           </div>
           <div className="font-mono text-[8px] text-slate-600 tracking-tighter uppercase">Sentiment</div>
         </div>
       </div>
 
-      {/* Link Score Breakdown */}
-      <div className="mb-8">
-        <h3 className="font-mono text-[10px] text-slate-500 tracking-[0.15em] uppercase mb-4">
-          Link Score Breakdown
-        </h3>
-        <div className="space-y-4">
-          {[
-            { label: "Semantic Relevance", value: node.breakdown.semantic, color: "#60a5fa" },
-            { label: "Entity Overlap", value: node.breakdown.entity, color: "#a78bfa" },
-            { label: "Magnitude Proximity", value: node.breakdown.magnitude, color: "#f59e0b" },
-            { label: "Sentiment Alignment", value: node.breakdown.sentiment, color: "#34d399" },
-          ].map((item) => (
-            <div key={item.label}>
-              <div className="flex justify-between font-mono text-[10px] mb-2">
-                <span className="text-slate-400">{item.label}</span>
-                <span style={{ color: item.color }}>{item.value.toFixed(2)}</span>
-              </div>
-              <div className="h-1 bg-[#1e2530] rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full"
-                  style={{ width: `${item.value * 100}%`, backgroundColor: item.color }}
-                />
-              </div>
-            </div>
-          ))}
+      {/* Focus articles show summary instead of breakdown bars */}
+      {isFocus ? (
+        <div className="mb-8">
+          <h3 className="font-mono text-[10px] text-slate-500 tracking-[0.15em] uppercase mb-3">
+            Article Summary
+          </h3>
+          {node.summary ? (
+            <p className="text-[12px] text-slate-300 leading-relaxed">
+              {node.summary}
+            </p>
+          ) : (
+            <p className="text-[11px] text-slate-500 italic">No summary available</p>
+          )}
         </div>
-      </div>
+      ) : (
+        /* Link Score Breakdown for non-focus nodes */
+        <div className="mb-8">
+          <h3 className="font-mono text-[10px] text-slate-500 tracking-[0.15em] uppercase mb-4">
+            Link Score Breakdown
+          </h3>
+          <div className="space-y-4">
+            {[
+              { label: "Semantic Similarity", value: node.breakdown.semantic, color: "#60a5fa" },
+              { label: "Entity Overlap", value: node.breakdown.entity, color: "#a78bfa" },
+              { label: "Magnitude Proximity", value: node.breakdown.magnitude, color: "#f59e0b" },
+              { label: "Sentiment Alignment", value: node.breakdown.sentiment, color: "#34d399" },
+            ].map((item) => (
+              <div key={item.label}>
+                <div className="flex justify-between font-mono text-[10px] mb-2">
+                  <span className="text-slate-400">{item.label}</span>
+                  <span style={{ color: item.color }}>{item.value.toFixed(2)}</span>
+                </div>
+                <div className="h-1 bg-[#1e2530] rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${item.value * 100}%`, backgroundColor: item.color }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Key Entities */}
       <div className="mb-6">
@@ -134,7 +143,7 @@ export default function GraphDetailPanel({ node, onExpand, onClose }: GraphDetai
         </div>
       </div>
 
-      {node.type !== "focus" && (
+      {!isFocus && (
         <button
           onClick={() => onExpand(node.id)}
           className="w-full border border-amber-500/40 bg-amber-500/10 text-amber-400 font-mono text-[11px] py-3 rounded hover:bg-amber-500/20 hover:text-amber-300 transition-all font-bold tracking-wide"
