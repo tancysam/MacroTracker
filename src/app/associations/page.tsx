@@ -281,7 +281,7 @@ function AssociationsContent() {
                 ) : (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <h2 className="text-sm font-bold text-white tracking-wide">Step 2: Top Linked Events</h2>
+                      <h2 className="text-sm font-bold text-white tracking-wide">Top Linked Events</h2>
                       <span className="text-[11px] text-slate-500">
                         {data.related_events.length} results • {data.scoring_version}
                       </span>
@@ -361,7 +361,7 @@ function AssociationsContent() {
                   </div>
                 ) : (
                   <div>
-                    <h2 className="text-sm font-bold text-white tracking-wide mb-1">Step 3: Trace Path</h2>
+                    <h2 className="text-sm font-bold text-white tracking-wide mb-1">Trace Path</h2>
                     <p className="text-[11px] text-slate-500 mb-4">
                       Chain of prior events used to explain the selected linked event.
                     </p>
