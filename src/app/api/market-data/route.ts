@@ -6,6 +6,40 @@ export const dynamic = "force-dynamic";
 const cache = new Map<string, { data: unknown; timestamp: number }>();
 const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
 
+let crumbCache: { crumb: string; cookie: string; timestamp: number } | null = null;
+const CRUMB_TTL = 60 * 60 * 1000; // 1 hour
+
+async function getYahooCrumb(): Promise<{ crumb: string; cookie: string }> {
+  if (crumbCache && Date.now() - crumbCache.timestamp < CRUMB_TTL) {
+    return crumbCache;
+  }
+
+  const consentRes = await fetch("https://fc.yahoo.com", {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Accept": "text/html",
+    },
+  });
+  const rawCookies = consentRes.headers.getSetCookie?.() ?? [];
+  const cookie = rawCookies.map((c) => c.split(";")[0]).join("; ");
+
+  const crumbRes = await fetch(
+    "https://query1.finance.yahoo.com/v1/test/getcrumb",
+    {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Cookie": cookie,
+      },
+    }
+  );
+  const crumb = await crumbRes.text();
+
+  crumbCache = { crumb, cookie, timestamp: Date.now() };
+  return { crumb, cookie };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = request.nextUrl;
@@ -26,12 +60,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(cached.data);
     }
 
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&period1=${from}&period2=${to}`;
+    const { crumb, cookie } = await getYahooCrumb();
+
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&period1=${from}&period2=${to}&crumb=${encodeURIComponent(crumb)}`;
     const res = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0" },
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Cookie": cookie,
+      },
     });
 
     if (!res.ok) {
+      if (res.status === 401 || res.status === 403) crumbCache = null;
       return NextResponse.json({ error: `Yahoo Finance returned ${res.status}` }, { status: 502 });
     }
 
