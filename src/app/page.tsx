@@ -21,7 +21,7 @@ export default function DashboardPage() {
     "WTI Crude",
     "US-China Relations",
   ]);
-  const [sortMode, setSortMode] = useState<SortMode>("composite");
+  const [sortMode, setSortMode] = useState<SortMode>("recency");
   const [minMagnitude, setMinMagnitude] = useState<number>(0);
   const [ingesting, setIngesting] = useState(false);
   const [ingestResult, setIngestResult] = useState<{
@@ -74,9 +74,8 @@ export default function DashboardPage() {
   };
 
   const sortModes: { key: SortMode; label: string }[] = [
-    { key: "heatscore", label: "HeatScore" },
     { key: "recency", label: "Recency" },
-    { key: "composite", label: "Composite" },
+    { key: "magnitude", label: "Magnitude" },
   ];
 
   return (

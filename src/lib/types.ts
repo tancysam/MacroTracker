@@ -155,7 +155,7 @@ export interface MarketCandle {
 }
 
 export type Sentiment = "Bullish" | "Bearish" | "Neutral";
-export type SortMode = "heatscore" | "recency" | "composite";
+export type SortMode = "recency" | "magnitude";
 export type TimeWindow = "7D" | "1M" | "3M" | "6M";
 export type TimeRange = "1M" | "3M" | "6M" | "1Y" | "ALL";
 export type EntityType = "companies" | "people" | "policies" | "markets" | "topics";
