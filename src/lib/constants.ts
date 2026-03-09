@@ -126,6 +126,7 @@ export const ENTITY_TYPE_COLORS: Record<string, string> = {
   people: "#a78bfa",
   policies: "#34d399",
   markets: "#fb923c",
+  topics: "#e879f9",
 };
 
 export const SENTIMENT_COLORS: Record<string, string> = {

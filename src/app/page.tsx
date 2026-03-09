@@ -22,6 +22,7 @@ export default function DashboardPage() {
     "US-China Relations",
   ]);
   const [sortMode, setSortMode] = useState<SortMode>("composite");
+  const [minMagnitude, setMinMagnitude] = useState<number>(0);
   const [ingesting, setIngesting] = useState(false);
   const [ingestResult, setIngestResult] = useState<{
     success: boolean;
@@ -40,6 +41,9 @@ export default function DashboardPage() {
       if (selectedTopics.length > 0) {
         params.set("topics", selectedTopics.join(","));
       }
+      if (minMagnitude > 0) {
+        params.set("min_magnitude", String(minMagnitude));
+      }
       const res = await fetch(`/api/articles?${params}`);
       const data = await res.json();
       setArticles(data.articles || []);
@@ -48,7 +52,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedTopics, sortMode]);
+  }, [selectedTopics, sortMode, minMagnitude]);
 
   useEffect(() => {
     fetchArticles();
@@ -104,6 +108,25 @@ export default function DashboardPage() {
                       }
                     >
                       {mode.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-1 bg-slate-900/50 border border-slate-800 p-1 rounded-lg">
+                  {([
+                    { label: "Any", value: 0 },
+                    { label: "High 7+", value: 7 },
+                    { label: "Critical 9+", value: 9 },
+                  ] as const).map((preset) => (
+                    <button
+                      key={preset.value}
+                      onClick={() => setMinMagnitude(preset.value)}
+                      className={
+                        minMagnitude === preset.value
+                          ? "px-3 py-1 text-[10px] font-bold bg-amber-500/20 text-amber-400 rounded"
+                          : "px-3 py-1 text-[10px] font-bold text-slate-500 hover:text-white transition-colors"
+                      }
+                    >
+                      {preset.label}
                     </button>
                   ))}
                 </div>

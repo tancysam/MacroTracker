@@ -1,7 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
+import { TOPIC_KEYWORDS } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
+
+function buildTopicFilterClauses(topics: string[]): string {
+  const clauses: string[] = [];
+  for (const topic of topics) {
+    // Always check taxonomy_tags for exact match
+    clauses.push(`taxonomy_tags.cs.{${topic}}`);
+    // Check primary_topic_key with ILIKE
+    clauses.push(`primary_topic_key.ilike.%${topic}%`);
+
+    // Expand via TOPIC_KEYWORDS — check each keyword against all entity columns via ILIKE
+    const keywords = TOPIC_KEYWORDS[topic];
+    if (keywords) {
+      for (const kw of keywords) {
+        clauses.push(`primary_topic_key.ilike.%${kw}%`);
+        clauses.push(`headline.ilike.%${kw}%`);
+      }
+    }
+  }
+  return clauses.join(",");
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,6 +31,7 @@ export async function GET(request: NextRequest) {
     const topics = topicsParam ? topicsParam.split(",").map((t) => t.trim()).filter(Boolean) : [];
     const sort = searchParams.get("sort") || "composite";
     const limit = parseInt(searchParams.get("limit") || "20");
+    const minMagnitude = parseFloat(searchParams.get("min_magnitude") || "0");
 
     let query = getSupabase()
       .from("articles")
@@ -18,12 +40,14 @@ export async function GET(request: NextRequest) {
       .order("published_at", { ascending: false })
       .limit(limit);
 
-    // Topic filtering — union of all selected topics
+    // Topic filtering — union of all selected topics with keyword expansion
     if (topics.length > 0) {
-      const clauses = topics.map((t) =>
-        `primary_topic_key.ilike.%${t}%,entities_topics.cs.{${t}},entities_markets.cs.{${t}},entities_companies.cs.{${t}},entities_policies.cs.{${t}}`
-      );
-      query = query.or(clauses.join(","));
+      query = query.or(buildTopicFilterClauses(topics));
+    }
+
+    // Magnitude filtering
+    if (minMagnitude > 0) {
+      query = query.gte("magnitude", minMagnitude);
     }
 
     const { data: articles, error } = await query;

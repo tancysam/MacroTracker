@@ -24,7 +24,7 @@ export default function GraphFilterPanel({
   linkThreshold,
   onThresholdChange,
 }: GraphFilterPanelProps) {
-  const entityTypes: EntityType[] = ["companies", "people", "policies", "markets"];
+  const entityTypes: EntityType[] = ["companies", "people", "policies", "markets", "topics"];
   const timeWindows: TimeWindow[] = ["7D", "1M", "3M", "6M"];
   const sentiments: (Sentiment | "All")[] = ["All", "Bearish", "Bullish", "Neutral"];
 

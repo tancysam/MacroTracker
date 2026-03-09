@@ -20,7 +20,7 @@ import type {
 const MODE_OPTIONS: AssociationMode[] = ["broad", "balanced", "strict", "investigative"];
 const TIME_WINDOWS: TimeWindow[] = ["7D", "1M", "3M", "6M"];
 const SENTIMENT_OPTIONS: (Sentiment | "All")[] = ["All", "Bullish", "Bearish", "Neutral"];
-const ENTITY_TYPES: EntityType[] = ["companies", "people", "policies", "markets"];
+const ENTITY_TYPES: EntityType[] = ["companies", "people", "policies", "markets", "topics"];
 
 function formatDate(date: string): string {
   return new Date(date).toLocaleDateString("en-US", {
@@ -51,6 +51,7 @@ function AssociationsContent() {
     people: true,
     policies: true,
     markets: true,
+    topics: true,
   });
 
   const [data, setData] = useState<AssociationsResponseV2 | null>(null);

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { getServiceClient } from "@/lib/supabase";
 import { fetchGeneralNews } from "@/lib/finnhub";
-import { extractArticleMetadata, generateEmbedding } from "@/lib/openai";
+import { extractArticleMetadata, classifyArticle, generateEmbedding } from "@/lib/openai";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -65,11 +65,14 @@ export async function POST() {
               return;
             }
 
-            // Generate embedding
+            // Run classification and embedding generation in parallel
             const embeddingText = `${item.headline}. ${item.summary || ""}`;
-            const embedding = await generateEmbedding(embeddingText);
+            const [classification, embedding] = await Promise.all([
+              classifyArticle(item.headline, item.summary || ""),
+              generateEmbedding(embeddingText),
+            ]);
 
-            // Update article with metadata + embedding
+            // Update article with merged metadata + classification + embedding
             await supabase
               .from("articles")
               .update({
@@ -78,11 +81,12 @@ export async function POST() {
                 primary_topic_key: metadata.primary_topic_key,
                 primary_topic_display: metadata.primary_topic_display,
                 entities_topics: metadata.entities_topics,
-                entities_markets: metadata.entities_markets,
+                entities_markets: classification.entities_markets,
                 entities_people: metadata.entities_people,
                 entities_companies: metadata.entities_companies,
                 entities_policies: metadata.entities_policies,
                 market_impacts: metadata.market_impacts ?? null,
+                taxonomy_tags: classification.taxonomy_tags,
                 embedding: JSON.stringify(embedding),
               })
               .eq("id", articleId);
@@ -93,7 +97,7 @@ export async function POST() {
 
             const entityMap: Record<string, string[]> = {
               Topics: metadata.entities_topics,
-              Markets: metadata.entities_markets,
+              Markets: classification.entities_markets,
               People: metadata.entities_people,
               Companies: metadata.entities_companies,
               Policies: metadata.entities_policies,
