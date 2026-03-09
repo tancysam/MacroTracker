@@ -93,9 +93,9 @@ export default function AssociationGraph({ nodes, edges, onNodeClick, onResetGra
         "link",
         d3.forceLink(edges)
           .id((d: any) => d.id)
-          .distance(180)
+          .distance(300)
       )
-      .force("charge", d3.forceManyBody().strength(-800))
+      .force("charge", d3.forceManyBody().strength(-1500))
       .force("center", d3.forceCenter(cx, cy))
       .force("collision", d3.forceCollide().radius((d: any) => d.id === "focus" ? 80 : 60));
 
