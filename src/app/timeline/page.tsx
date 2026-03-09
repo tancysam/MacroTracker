@@ -15,6 +15,7 @@ function TimelineContent() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [sentimentFilter, setSentimentFilter] = useState<Sentiment | "All">("All");
+  const [minMagnitude, setMinMagnitude] = useState<number>(0);
   const [topicDisplay, setTopicDisplay] = useState(topic);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
 
@@ -25,6 +26,9 @@ function TimelineContent() {
       const params = new URLSearchParams({ primary_topic_key: topic });
       if (sentimentFilter !== "All") {
         params.set("sentiment", sentimentFilter);
+      }
+      if (minMagnitude > 0) {
+        params.set("min_magnitude", String(minMagnitude));
       }
       const res = await fetch(`/api/articles/timeline?${params}`);
       const data = await res.json();
@@ -39,7 +43,7 @@ function TimelineContent() {
     } finally {
       setLoading(false);
     }
-  }, [topic, sentimentFilter]);
+  }, [topic, sentimentFilter, minMagnitude]);
 
   useEffect(() => {
     fetchArticles();
@@ -98,20 +102,41 @@ function TimelineContent() {
               {articles.length} events
             </span>
           </div>
-          <div className="flex bg-slate-900/50 p-1 rounded-lg border border-slate-800">
-            {sentimentOptions.map((s) => (
-              <button
-                key={s}
-                onClick={() => setSentimentFilter(s)}
-                className={
-                  sentimentFilter === s
-                    ? "px-3 py-1 text-[10px] font-bold bg-slate-800 text-white rounded"
-                    : "px-3 py-1 text-[10px] font-bold text-slate-500"
-                }
-              >
-                {s}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <div className="flex bg-slate-900/50 p-1 rounded-lg border border-slate-800">
+              {sentimentOptions.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setSentimentFilter(s)}
+                  className={
+                    sentimentFilter === s
+                      ? "px-3 py-1 text-[10px] font-bold bg-slate-800 text-white rounded"
+                      : "px-3 py-1 text-[10px] font-bold text-slate-500"
+                  }
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+            <div className="flex bg-slate-900/50 p-1 rounded-lg border border-slate-800">
+              {([
+                { label: "Any", value: 0 },
+                { label: "High 7+", value: 7 },
+                { label: "Critical 9+", value: 9 },
+              ] as const).map((preset) => (
+                <button
+                  key={preset.value}
+                  onClick={() => setMinMagnitude(preset.value)}
+                  className={
+                    minMagnitude === preset.value
+                      ? "px-3 py-1 text-[10px] font-bold bg-amber-500/20 text-amber-400 rounded"
+                      : "px-3 py-1 text-[10px] font-bold text-slate-500"
+                  }
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

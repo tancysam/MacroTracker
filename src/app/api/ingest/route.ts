@@ -83,6 +83,7 @@ export async function POST() {
                 entities_companies: metadata.entities_companies,
                 entities_policies: metadata.entities_policies,
                 market_impacts: metadata.market_impacts ?? null,
+                taxonomy_tags: metadata.taxonomy_tags || [],
                 embedding: JSON.stringify(embedding),
               })
               .eq("id", articleId);

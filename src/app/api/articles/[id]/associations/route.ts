@@ -26,6 +26,7 @@ type ScoringConfig = {
     magnitude: number;
     sentiment: number;
     temporal: number;
+    marketImpact: number;
   };
 };
 
@@ -36,25 +37,25 @@ const MODE_CONFIG: Record<AssociationMode, ScoringConfig> = {
     threshold: 0.45,
     maxRelated: 8,
     minEvidenceSignals: 1,
-    weights: { semantic: 0.35, entity: 0.25, magnitude: 0.15, sentiment: 0.1, temporal: 0.15 },
+    weights: { semantic: 0.30, entity: 0.22, magnitude: 0.13, sentiment: 0.10, temporal: 0.15, marketImpact: 0.10 },
   },
   balanced: {
     threshold: 0.55,
     maxRelated: 6,
     minEvidenceSignals: 2,
-    weights: { semantic: 0.35, entity: 0.3, magnitude: 0.15, sentiment: 0.1, temporal: 0.1 },
+    weights: { semantic: 0.30, entity: 0.25, magnitude: 0.13, sentiment: 0.10, temporal: 0.10, marketImpact: 0.12 },
   },
   strict: {
     threshold: 0.65,
     maxRelated: 5,
     minEvidenceSignals: 2,
-    weights: { semantic: 0.4, entity: 0.3, magnitude: 0.15, sentiment: 0.1, temporal: 0.05 },
+    weights: { semantic: 0.35, entity: 0.25, magnitude: 0.13, sentiment: 0.10, temporal: 0.05, marketImpact: 0.12 },
   },
   investigative: {
     threshold: 0.58,
     maxRelated: 7,
     minEvidenceSignals: 2,
-    weights: { semantic: 0.3, entity: 0.25, magnitude: 0.1, sentiment: 0.05, temporal: 0.3 },
+    weights: { semantic: 0.25, entity: 0.22, magnitude: 0.08, sentiment: 0.05, temporal: 0.30, marketImpact: 0.10 },
   },
 };
 
@@ -186,7 +187,7 @@ function temporalContext(
 }
 
 function dominantType(sharedByType: Record<string, string[]>): EntityType {
-  const ordered = (["companies", "people", "policies", "markets"] as EntityType[]).map((type) => ({
+  const ordered = (["companies", "people", "policies", "markets", "topics"] as EntityType[]).map((type) => ({
     type,
     count: (sharedByType[type] || []).length,
   }));
@@ -235,6 +236,27 @@ function formatShortDate(dateStr: string): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
 }
 
+function marketImpactAlignment(
+  refImpacts: Article["market_impacts"],
+  candImpacts: Article["market_impacts"]
+): number {
+  if (!refImpacts?.length || !candImpacts?.length) return 0;
+
+  let bestScore = 0;
+  for (const ref of refImpacts) {
+    for (const cand of candImpacts) {
+      if (ref.asset === cand.asset) {
+        if (ref.direction === cand.direction) {
+          bestScore = Math.max(bestScore, 1.0);
+        } else {
+          bestScore = Math.max(bestScore, 0.5);
+        }
+      }
+    }
+  }
+  return bestScore;
+}
+
 function scoreCandidate(
   reference: Article,
   candidate: Article,
@@ -255,13 +277,15 @@ function scoreCandidate(
 
   const temporal = temporalContext(reference.published_at, candidate.published_at, windowDays);
   const type = dominantType(sharedByType);
+  const mktImpact = marketImpactAlignment(reference.market_impacts, candidate.market_impacts);
 
   const linkScore =
     config.weights.semantic * semantic +
     config.weights.entity * overlap +
     config.weights.magnitude * clamp(magnitude, 0, 1) +
     config.weights.sentiment * sentiment +
-    config.weights.temporal * temporal.score;
+    config.weights.temporal * temporal.score +
+    config.weights.marketImpact * mktImpact;
 
   const evidenceSignals =
     (sharedCount > 0 ? 1 : 0) +
@@ -397,6 +421,7 @@ function toLegacyGraph(
         people: focus.entities_people || [],
         policies: focus.entities_policies || [],
         markets: focus.entities_markets || [],
+        topics: focus.entities_topics || [],
       },
       breakdown: { semantic: 1, entity: 1, magnitude: 1, sentiment: 1 },
       level: 0,
@@ -427,6 +452,7 @@ function toLegacyGraph(
         people: event.evidence.shared_entities_by_type.people || [],
         policies: event.evidence.shared_entities_by_type.policies || [],
         markets: event.evidence.shared_entities_by_type.markets || [],
+        topics: event.evidence.shared_entities_by_type.topics || [],
       },
       breakdown: {
         semantic: event.evidence.semantic_similarity,
@@ -462,7 +488,7 @@ function toLegacyGraph(
         date: formatShortDate(node.published_at),
         headline: node.headline,
         summary: null,
-        entities: { companies: [], people: [], policies: [], markets: [] },
+        entities: { companies: [], people: [], policies: [], markets: [], topics: [] },
         breakdown: { semantic: 0.5, entity: 0.5, magnitude: 0.5, sentiment: 0.5 },
         level: levelIndex,
         articleId: node.article_id,

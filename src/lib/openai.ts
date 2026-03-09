@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { TOPIC_GROUPS } from "./constants";
 
 let _openai: OpenAI | null = null;
 
@@ -29,12 +30,17 @@ export interface ExtractionResult {
   primary_topic_key: string;
   primary_topic_display: string;
   market_impacts: { asset: string; direction: "up" | "down" | "mixed" }[];
+  taxonomy_tags: string[];
 }
 
 export async function extractArticleMetadata(
   headline: string,
   summary: string
 ): Promise<ExtractionResult> {
+  // Build a flat taxonomy list from TOPIC_GROUPS for the LLM prompt
+  const taxonomyList = TOPIC_GROUPS.flatMap((g) => g.topics);
+  const taxonomyString = taxonomyList.join(", ");
+
   const response = await getOpenAI().chat.completions.create({
     model: "gpt-5-nano-2025-08-07",
     response_format: { type: "json_object" },
@@ -52,9 +58,10 @@ Return a JSON object with these exact fields:
 - entities_policies: string[] — Policy types (e.g., "Rate Hike", "QE", "Tariffs")
 - sentiment: "Bullish" | "Bearish" | "Neutral" — market outlook
 - magnitude: number (0-10) — significance/impact score
-- primary_topic_key: string — the single most-mentioned entity tag across all entity types
+- primary_topic_key: string — the single most-mentioned entity tag across all entity types. IMPORTANT: If the most-mentioned entity matches or closely corresponds to one of the taxonomy labels listed below, use that exact taxonomy label as the primary_topic_key (e.g., use "Russia-Ukraine" instead of "Russia", "US-China Relations" instead of "US-China Trade War", "Brent Crude" instead of "Oil Prices"). This ensures consistent grouping.
 - primary_topic_display: string — a human-readable topic name derived from the most-mentioned entity (e.g., "Federal Reserve Rate Policy")
 - market_impacts: array of 1-5 objects, each with { asset: string, direction: "up" | "down" | "mixed" }. Identify which financial assets/indices are most likely impacted and in which direction. Use ONLY these canonical asset names: "S&P 500", "US 10Y Yield", "EUR/USD", "Gold", "Brent Crude", "DXY Index", "Tech Stocks", "Defense Stocks", "Bank Stocks", "Bitcoin", "VIX". Return an empty array if no clear market impact.
+- taxonomy_tags: string[] — Select ALL applicable labels from this predefined taxonomy list that are relevant to the article. Only use labels from this exact list: [${taxonomyString}]. Select 1-5 labels that best classify the article. Do not invent new labels; only use labels from this list.
 
 IMPORTANT: Do NOT include news agencies, wire services, or media organizations (e.g., Reuters, Bloomberg, AP, CNBC) in any entity category.`,
       },
@@ -67,5 +74,10 @@ IMPORTANT: Do NOT include news agencies, wire services, or media organizations (
 
   const content = response.choices[0].message.content;
   if (!content) throw new Error("Empty response from OpenAI");
-  return JSON.parse(content) as ExtractionResult;
+  const parsed = JSON.parse(content) as ExtractionResult;
+  // Ensure taxonomy_tags is always an array
+  if (!Array.isArray(parsed.taxonomy_tags)) {
+    parsed.taxonomy_tags = [];
+  }
+  return parsed;
 }
