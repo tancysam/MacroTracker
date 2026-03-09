@@ -1,11 +1,12 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import NavHeader from "@/components/NavHeader";
 import FocusArticleBar from "@/components/FocusArticleBar";
 import AssociationGraph from "@/components/AssociationGraph";
 import SentimentBadge from "@/components/SentimentBadge";
+import TopicPicker from "@/components/TopicPicker";
 import type {
   AssociationMode,
   AssociationNode,
@@ -104,13 +105,15 @@ function AssociationsContent() {
     [data, activeTraceRoot]
   );
 
+  const router = useRouter();
+
   if (!articleId) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <p className="text-slate-500">
-          Select &quot;Associations →&quot; on a news card to investigate linked events.
-        </p>
-      </div>
+      <TopicPicker
+        title="Investigate Associations"
+        subtitle="Choose a topic to explore, then select an article from its timeline to investigate linked events."
+        onSelect={(t) => router.push(`/timeline?topic=${encodeURIComponent(t)}`)}
+      />
     );
   }
 

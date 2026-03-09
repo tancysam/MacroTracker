@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import NavHeader from "@/components/NavHeader";
 import PriceChart from "@/components/PriceChart";
 import TimelineCard from "@/components/TimelineCard";
+import TopicPicker from "@/components/TopicPicker";
 import type { Article, Sentiment } from "@/lib/types";
 
 function TimelineContent() {
@@ -46,11 +47,15 @@ function TimelineContent() {
 
   const sentimentOptions: (Sentiment | "All")[] = ["All", "Bullish", "Bearish", "Neutral"];
 
+  const router = useRouter();
+
   if (!topic) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <p className="text-slate-500">Select a topic from the Dashboard to view its timeline.</p>
-      </div>
+      <TopicPicker
+        title="Explore Topic Timelines"
+        subtitle="Choose a topic to see its news timeline and price chart."
+        onSelect={(t) => router.push(`/timeline?topic=${encodeURIComponent(t)}`)}
+      />
     );
   }
 

@@ -39,19 +39,24 @@ export default function TrendingPanel() {
           <p className="text-slate-500 text-xs">No trending data yet.</p>
         ) : (
           <div className="space-y-4">
-            {entries.map((entry) => (
+            {entries.map((entry, index) => (
               <Link
                 key={entry.entity_name}
                 href={`/timeline?topic=${encodeURIComponent(entry.entity_name)}`}
                 className="flex flex-col gap-1 border-b border-slate-800 pb-3 hover:bg-slate-800/30 rounded px-1 transition-colors cursor-pointer"
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-white">{entry.entity_name}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-slate-600 w-4 text-right">
+                      {index + 1}
+                    </span>
+                    <span className="text-sm font-semibold text-white">{entry.entity_name}</span>
+                  </div>
                   <span className="text-xs font-bold text-[#00d4ff]">
                     HS: {Math.round(entry.heat_score)}
                   </span>
                 </div>
-                <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mt-1">
+                <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mt-1 ml-6">
                   <div
                     className="bg-[#00d4ff] h-full rounded-full transition-all"
                     style={{ width: `${Math.min((entry.heat_score / maxScore) * 100, 100)}%` }}

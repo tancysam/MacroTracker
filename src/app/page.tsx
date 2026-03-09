@@ -10,7 +10,17 @@ import type { Article, SortMode } from "@/lib/types";
 export default function DashboardPage() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedTopic, setSelectedTopic] = useState("All News");
+  const [selectedTopics, setSelectedTopics] = useState<string[]>([
+    "Technology",
+    "Energy",
+    "Crypto Regulation",
+    "Russia-Ukraine",
+    "Middle East Conflict",
+    "Gold",
+    "Brent Crude",
+    "WTI Crude",
+    "US-China Relations",
+  ]);
   const [sortMode, setSortMode] = useState<SortMode>("composite");
   const [ingesting, setIngesting] = useState(false);
   const [ingestResult, setIngestResult] = useState<{
@@ -27,8 +37,8 @@ export default function DashboardPage() {
     setLoading(true);
     try {
       const params = new URLSearchParams({ sort: sortMode, limit: "30" });
-      if (selectedTopic !== "All News") {
-        params.set("topic", selectedTopic);
+      if (selectedTopics.length > 0) {
+        params.set("topics", selectedTopics.join(","));
       }
       const res = await fetch(`/api/articles?${params}`);
       const data = await res.json();
@@ -38,7 +48,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedTopic, sortMode]);
+  }, [selectedTopics, sortMode]);
 
   useEffect(() => {
     fetchArticles();
@@ -71,7 +81,7 @@ export default function DashboardPage() {
       <div className="flex flex-1 overflow-hidden">
         {/* Left Sidebar */}
         <aside className="w-64 border-r border-[#1e2530] bg-[#080b12] flex flex-col p-4 gap-6 shrink-0">
-          <TopicChips selected={selectedTopic} onSelect={setSelectedTopic} />
+          <TopicChips selected={selectedTopics} onSelect={setSelectedTopics} />
         </aside>
 
         {/* Main Feed */}
@@ -109,11 +119,10 @@ export default function DashboardPage() {
 
             {ingestResult && (
               <div
-                className={`relative rounded-xl border p-4 text-sm ${
-                  ingestResult.success
-                    ? "border-green-700/50 bg-green-950/30"
-                    : "border-red-700/50 bg-red-950/30"
-                }`}
+                className={`relative rounded-xl border p-4 text-sm ${ingestResult.success
+                  ? "border-green-700/50 bg-green-950/30"
+                  : "border-red-700/50 bg-red-950/30"
+                  }`}
               >
                 <button
                   onClick={() => setIngestResult(null)}

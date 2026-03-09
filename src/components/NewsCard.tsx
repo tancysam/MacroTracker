@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import type { Article } from "@/lib/types";
 import { getMarketImpacts } from "@/lib/getMarketImpacts";
 import SentimentBadge from "./SentimentBadge";
 
 export default function NewsCard({ article }: { article: Article }) {
+  const router = useRouter();
   const impacts = getMarketImpacts(article);
 
   const allEntities = [
@@ -21,7 +23,7 @@ export default function NewsCard({ article }: { article: Article }) {
   return (
     <div
       className="bg-slate-900/20 p-5 rounded-xl border border-slate-800/50 shadow-sm hover:border-[#00d4ff]/50 transition-all cursor-pointer group"
-      onClick={() => window.open(article.url, "_blank", "noopener,noreferrer")}
+      onClick={() => router.push(`/article/${article.id}`)}
     >
       <div className="flex gap-6">
         {article.image_url && (
@@ -72,12 +74,14 @@ export default function NewsCard({ article }: { article: Article }) {
           <div className="flex items-center justify-between">
             <div className="flex flex-wrap gap-2">
               {allEntities.map((tag) => (
-                <span
+                <Link
                   key={tag}
-                  className="px-2 py-1 rounded bg-slate-700 text-slate-400 text-[10px] font-medium"
+                  href={`/timeline?topic=${encodeURIComponent(tag)}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="px-2 py-1 rounded bg-slate-700 text-slate-400 text-[10px] font-medium hover:bg-[#00d4ff]/15 hover:text-[#00d4ff] transition-colors"
                 >
                   #{tag.replace(/\s+/g, "")}
-                </span>
+                </Link>
               ))}
             </div>
             <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-4">

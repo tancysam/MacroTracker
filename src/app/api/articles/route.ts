@@ -6,7 +6,8 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = request.nextUrl;
-    const topic = searchParams.get("topic");
+    const topicsParam = searchParams.get("topics");
+    const topics = topicsParam ? topicsParam.split(",").map((t) => t.trim()).filter(Boolean) : [];
     const sort = searchParams.get("sort") || "composite";
     const limit = parseInt(searchParams.get("limit") || "20");
 
@@ -17,12 +18,12 @@ export async function GET(request: NextRequest) {
       .order("published_at", { ascending: false })
       .limit(limit);
 
-    // Topic filtering
-    if (topic && topic !== "All News") {
-      // Search across all entity arrays and primary_topic_key
-      query = query.or(
-        `primary_topic_key.ilike.%${topic}%,entities_topics.cs.{${topic}},entities_markets.cs.{${topic}},entities_companies.cs.{${topic}},entities_policies.cs.{${topic}}`
+    // Topic filtering — union of all selected topics
+    if (topics.length > 0) {
+      const clauses = topics.map((t) =>
+        `primary_topic_key.ilike.%${t}%,entities_topics.cs.{${t}},entities_markets.cs.{${t}},entities_companies.cs.{${t}},entities_policies.cs.{${t}}`
       );
+      query = query.or(clauses.join(","));
     }
 
     const { data: articles, error } = await query;
