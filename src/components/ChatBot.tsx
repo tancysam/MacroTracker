@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
@@ -9,6 +9,7 @@ import type { Components } from "react-markdown";
 /** Custom event name used to trigger history restore from NavHeader */
 export const CHAT_HISTORY_RESTORE_EVENT = "macrotracker:chat-restore";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import ChatHistoryPanel from "./ChatHistoryPanel";
 
 interface Message {
     role: "user" | "assistant";
@@ -26,7 +27,21 @@ interface ArticlePreview {
 
 export default function ChatBot() {
     const [isOpen, setIsOpen] = useState(false);
+    const [isClosing, setIsClosing] = useState(false);
+    const [showHistory, setShowHistory] = useState(false);
     const [authenticated, setAuthenticated] = useState(false);
+    const pathname = usePathname();
+    const hasAutoOpened = useRef(false);
+    const autoCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const closeAnimTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const closeChat = useCallback(() => {
+        setIsClosing(true);
+        closeAnimTimer.current = setTimeout(() => {
+            setIsOpen(false);
+            setIsClosing(false);
+        }, 200);
+    }, []);
     const [messages, setMessages] = useState<Message[]>([
         {
             role: "assistant",
@@ -77,6 +92,29 @@ export default function ChatBot() {
             } catch { /* silent — not critical */ }
         }, 800);
     }, []);
+
+    // Auto-open on dashboard after login; close after 5 s if no input
+    useEffect(() => {
+        if (authenticated && pathname === "/" && !hasAutoOpened.current) {
+            hasAutoOpened.current = true;
+            setIsOpen(true);
+            autoCloseTimer.current = setTimeout(() => {
+                closeChat();
+            }, 5000);
+        }
+        return () => {
+            if (autoCloseTimer.current) clearTimeout(autoCloseTimer.current);
+            if (closeAnimTimer.current) clearTimeout(closeAnimTimer.current);
+        };
+    }, [authenticated, pathname, closeChat]);
+
+    // Cancel the auto-close timer as soon as the user starts typing
+    useEffect(() => {
+        if (input.length > 0 && autoCloseTimer.current) {
+            clearTimeout(autoCloseTimer.current);
+            autoCloseTimer.current = null;
+        }
+    }, [input]);
 
     // Listen for restore events dispatched from NavHeader
     useEffect(() => {
@@ -293,7 +331,7 @@ export default function ChatBot() {
                     <button
                         onClick={() => {
                             router.push(href!);
-                            setIsOpen(false);
+                            closeChat();
                         }}
                         onMouseEnter={articleMatch ? (e) => {
                             const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -326,6 +364,20 @@ export default function ChatBot() {
         setMessages([INITIAL_MESSAGE]);
         setSessionId(null);
     }
+
+    const handleRestore = useCallback(async (sessionId: string) => {
+        try {
+            const res = await fetch(`/api/chat/history/${sessionId}`);
+            if (!res.ok) return;
+            const json = await res.json();
+            const restored: Message[] = Array.isArray(json.session?.messages) ? json.session.messages : [];
+            if (restored.length === 0) return;
+            setMessages(restored);
+            setSessionId(sessionId);
+            setShowHistory(false);
+            setIsOpen(true);
+        } catch { /* silent */ }
+    }, []);
 
     // Position the hover card above (or below if too close to top) the hovered link
     const hoverCardStyle = (() => {
@@ -391,12 +443,24 @@ export default function ChatBot() {
 
             {/* FAB Button */}
             <button
-                onClick={() => setIsOpen(!isOpen)}
+                onClick={() => {
+                    if (autoCloseTimer.current) {
+                        clearTimeout(autoCloseTimer.current);
+                        autoCloseTimer.current = null;
+                    }
+                    if (isOpen) {
+                        closeChat();
+                    } else {
+                        setIsClosing(false);
+                        if (closeAnimTimer.current) clearTimeout(closeAnimTimer.current);
+                        setIsOpen(true);
+                    }
+                }}
                 className="fixed bottom-5 right-5 z-50 w-13 h-13 rounded-full bg-gradient-to-br from-[#00d4ff] to-[#0077bb] text-white shadow-xl shadow-[#00d4ff]/25 hover:shadow-[#00d4ff]/50 flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95"
                 aria-label="Open MacroTracker AI chat"
                 style={{ width: "52px", height: "52px" }}
             >
-                {isOpen ? (
+                {(isOpen || isClosing) ? (
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                     </svg>
@@ -412,9 +476,15 @@ export default function ChatBot() {
             </button>
 
             {/* Chat Panel */}
-            {isOpen && (
-                <div className="fixed bottom-20 right-5 z-50 flex flex-col bg-[#0a0d14] border border-[#1e2530] rounded-2xl shadow-2xl shadow-black/60 overflow-hidden animate-[slideUp_0.2s_ease-out]"
+            {(isOpen || isClosing) && (
+                <div className={`fixed bottom-20 right-5 z-50 flex flex-col bg-[#0a0d14] border border-[#1e2530] rounded-2xl shadow-2xl shadow-black/60 overflow-hidden ${isClosing ? "animate-[slideDown_0.2s_ease-in_forwards]" : "animate-[slideUp_0.2s_ease-out]"}`}
                     style={{ width: `${panelSize.width}px`, height: `${panelSize.height}px` }}
+                    onClick={() => {
+                        if (autoCloseTimer.current) {
+                            clearTimeout(autoCloseTimer.current);
+                            autoCloseTimer.current = null;
+                        }
+                    }}
                 >
                     {/* Resize handle — top-left corner */}
                     <div
@@ -451,12 +521,20 @@ export default function ChatBot() {
                                 <p className="text-[10px] text-slate-500 leading-none mt-0.5">Macro intelligence assistant</p>
                             </div>
                         </div>
-                        <button
-                            onClick={handleClearChat}
-                            className="text-[10px] text-slate-500 hover:text-white transition-colors px-2.5 py-1 rounded-md border border-slate-800 hover:border-slate-600 hover:bg-slate-800/40"
-                        >
-                            Clear chat
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setShowHistory(true)}
+                                className="text-[10px] text-slate-500 hover:text-white transition-colors px-2.5 py-1 rounded-md border border-slate-800 hover:border-slate-600 hover:bg-slate-800/40"
+                            >
+                                History
+                            </button>
+                            <button
+                                onClick={handleClearChat}
+                                className="text-[10px] text-slate-500 hover:text-white transition-colors px-2.5 py-1 rounded-md border border-slate-800 hover:border-slate-600 hover:bg-slate-800/40"
+                            >
+                                Clear chat
+                            </button>
+                        </div>
                     </div>
 
                     {/* Messages */}
@@ -553,6 +631,12 @@ export default function ChatBot() {
                         <p className="text-[10px] text-slate-600 mt-2">Enter to send · Shift+Enter for new line</p>
                     </div>
                 </div>
+            )}
+            {showHistory && (
+                <ChatHistoryPanel
+                    onClose={() => setShowHistory(false)}
+                    onRestore={handleRestore}
+                />
             )}
         </>
     );
