@@ -12,19 +12,27 @@ interface PriceChartProps {
   hoveredArticleId?: string | null;
 }
 
-export default function PriceChart({
-  topic,
-  articles,
-  onBubbleClick,
-  onBubbleHover,
-  hoveredArticleId,
-}: PriceChartProps) {
+type TooltipHeadline = { id: string; headline: string; color: string };
+type GroupedEvent = {
+  key: string;
+  x: number;
+  y: number;
+  color: string;
+  bpsLabel: string;
+  primaryId: string;
+  articleIds: string[];
+  headlines: TooltipHeadline[];
+};
+
+export default function PriceChart(props: PriceChartProps) {
+  const { articles, onBubbleClick, onBubbleHover, hoveredArticleId } = props;
   const svgRef = useRef<SVGSVGElement>(null);
+  const hideTooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedMarket, setSelectedMarket] = useState("US 10Y Yield");
   const [timeRange, setTimeRange] = useState<TimeRange>("1M");
   const [candles, setCandles] = useState<{ t: number[]; c: number[] } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [tooltip, setTooltip] = useState<{ x: number; y: number; headline: string } | null>(null);
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; primaryId: string; headlines: TooltipHeadline[] } | null>(null);
 
   const fetchCandles = useCallback(async () => {
     setLoading(true);
@@ -33,7 +41,7 @@ export default function PriceChart({
 
     const now = Math.floor(Date.now() / 1000);
     const days = TIME_WINDOW_DAYS[timeRange] || 180;
-    const from = now - days * 86400;
+    const from = timeRange === "ALL" ? 0 : now - days * 86400;
 
     try {
       const res = await fetch(
@@ -56,7 +64,30 @@ export default function PriceChart({
     fetchCandles();
   }, [fetchCandles]);
 
-  const timeRanges: TimeRange[] = ["1M", "3M", "6M", "1Y", "ALL"];
+  useEffect(() => {
+    return () => {
+      if (hideTooltipTimerRef.current) {
+        clearTimeout(hideTooltipTimerRef.current);
+      }
+    };
+  }, []);
+
+  const clearHideTooltipTimer = useCallback(() => {
+    if (hideTooltipTimerRef.current) {
+      clearTimeout(hideTooltipTimerRef.current);
+      hideTooltipTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleTooltipHide = useCallback(() => {
+    clearHideTooltipTimer();
+    hideTooltipTimerRef.current = setTimeout(() => {
+      setTooltip(null);
+      onBubbleHover?.(null);
+    }, 180);
+  }, [clearHideTooltipTimer, onBubbleHover]);
+
+  const timeRanges: TimeRange[] = ["1M", "3M", "6M", "1Y", "2Y", "ALL"];
 
   const renderChart = () => {
     if (!candles || candles.t.length === 0) {
@@ -87,31 +118,79 @@ export default function PriceChart({
 
     const pathD = `M${points.join(" L")}`;
 
-    // Map articles to bubble positions — find nearest candle by timestamp
-    // Track how many bubbles land on each candle index so we can offset them
-    const slotsByIdx = new Map<number, number>();
-    const eventBubbles = articles.map((a) => {
+    // Map articles to grouped marker positions.
+    // Articles before the chart start are grouped at the left edge.
+    // Articles at/after the last candle are grouped at the right edge.
+    const minTime = times[0];
+    const maxTime = times[times.length - 1];
+    const lastIdx = times.length - 1;
+    const groupedBySlot = new Map<string, GroupedEvent>();
+
+    for (const a of articles) {
       const at = Math.floor(new Date(a.published_at).getTime() / 1000);
-      let idx = 0;
-      let minDiff = Math.abs(times[0] - at);
-      for (let i = 1; i < times.length; i++) {
-        const diff = Math.abs(times[i] - at);
-        if (diff < minDiff) { minDiff = diff; idx = i; }
+
+      let fracIdx = lastIdx;
+      let slotIdx = lastIdx;
+      let slotKey = "right-edge";
+
+      if (at < minTime) {
+        fracIdx = 0;
+        slotIdx = 0;
+        slotKey = "left-edge";
+      } else if (at < maxTime) {
+        // Find surrounding candle indices and interpolate.
+        let lo = 0;
+        let hi = lastIdx;
+        for (let i = 0; i < times.length; i++) {
+          if (times[i] <= at) lo = i;
+          if (times[i] >= at && hi === lastIdx) hi = i;
+        }
+
+        if (lo === hi || times[lo] === times[hi]) {
+          fracIdx = lo;
+        } else {
+          const t = (at - times[lo]) / (times[hi] - times[lo]);
+          fracIdx = lo + t * (hi - lo);
+        }
+
+        slotIdx = Math.max(0, Math.min(lastIdx, Math.round(fracIdx)));
+        slotKey = `slot-${slotIdx}`;
       }
-      const baseX = padding.left + (idx / (prices.length - 1)) * chartW;
-      const baseY = padding.top + chartH - ((prices[idx] - minP) / range) * chartH;
+
+      const slotX = padding.left + (slotIdx / lastIdx) * chartW;
+
+      // Interpolate price for y-position on the line.
+      const loI = Math.floor(fracIdx);
+      const hiI = Math.min(loI + 1, lastIdx);
+      const frac = fracIdx - loI;
+      const interpPrice = prices[loI] + (prices[hiI] - prices[loI]) * frac;
+      const baseY = padding.top + chartH - ((interpPrice - minP) / range) * chartH;
+
       const color =
         a.sentiment === "Bearish" ? "#ff4d6d" : a.sentiment === "Bullish" ? "#00f5d4" : "#fb8500";
-      const prevPrice = idx > 0 ? prices[idx - 1] : prices[idx];
-      const bpsChange = Math.round((prices[idx] - prevPrice) * 100);
+      const prevPrice = slotIdx > 0 ? prices[slotIdx - 1] : prices[slotIdx];
+      const bpsChange = Math.round((prices[slotIdx] - prevPrice) * 100);
       const bpsLabel = bpsChange >= 0 ? `+${bpsChange}bps` : `${bpsChange}bps`;
-      // Spread bubbles on the same candle: alternate left/right and stack upward
-      const slot = slotsByIdx.get(idx) || 0;
-      slotsByIdx.set(idx, slot + 1);
-      const xOffset = slot === 0 ? 0 : slot % 2 === 1 ? (Math.ceil(slot / 2) * 22) : -(Math.ceil(slot / 2) * 22);
-      const yOffset = slot * 24;
-      return { x: baseX + xOffset, y: baseY - yOffset, color, headline: a.headline, id: a.id, bpsLabel };
-    });
+
+      const existing = groupedBySlot.get(slotKey);
+      if (existing) {
+        existing.articleIds.push(a.id);
+        existing.headlines.push({ id: a.id, headline: a.headline, color });
+      } else {
+        groupedBySlot.set(slotKey, {
+          key: slotKey,
+          x: slotX,
+          y: baseY,
+          color,
+          bpsLabel,
+          primaryId: a.id,
+          articleIds: [a.id],
+          headlines: [{ id: a.id, headline: a.headline, color }],
+        });
+      }
+    }
+
+    const groupedEvents = Array.from(groupedBySlot.values()).sort((a, b) => a.x - b.x);
 
     const yLabels = Array.from({ length: 5 }, (_, i) => {
       const val = minP + (range * i) / 4;
@@ -119,15 +198,21 @@ export default function PriceChart({
       return { val: val.toFixed(2), y };
     });
 
+    const spanDays = (times[times.length - 1] - times[0]) / 86400;
     const xTickCount = 5;
+    const dateLabelOptions: Intl.DateTimeFormatOptions =
+      spanDays > 730
+        ? { month: "short", year: "numeric", timeZone: "UTC" }
+        : spanDays > 120
+          ? { month: "short", day: "numeric", year: "2-digit", timeZone: "UTC" }
+          : { month: "short", day: "numeric", timeZone: "UTC" };
     const xLabels = Array.from({ length: xTickCount }, (_, i) => {
       const idx = Math.round((i / (xTickCount - 1)) * (times.length - 1));
       const x = padding.left + (idx / (prices.length - 1)) * chartW;
       const date = new Date(times[idx] * 1000);
-      const label = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      const label = date.toLocaleDateString("en-US", dateLabelOptions);
       return { x, label };
     });
-
 
     return (
       <div className="relative">
@@ -188,6 +273,26 @@ export default function PriceChart({
             </g>
           ))}
 
+          {/* News article vertical indicators */}
+          <g>
+            {groupedEvents.map((event) => {
+              const isHovered = hoveredArticleId ? event.articleIds.includes(hoveredArticleId) : false;
+              return (
+                <line
+                  key={`news-line-${event.key}`}
+                  x1={event.x}
+                  y1={padding.top}
+                  x2={event.x}
+                  y2={padding.top + chartH}
+                  stroke={event.color}
+                  strokeDasharray="4 4"
+                  strokeWidth={isHovered ? 1.5 : 1}
+                  opacity={isHovered ? 0.6 : 0.3}
+                />
+              );
+            })}
+          </g>
+
           {/* Price line */}
           <path
             d={pathD}
@@ -198,45 +303,43 @@ export default function PriceChart({
           />
 
           {/* Event bubbles */}
-          {eventBubbles.map((bubble, i) => {
-            const isHovered = hoveredArticleId === bubble.id;
+          {groupedEvents.map((event) => {
+            const isHovered = hoveredArticleId ? event.articleIds.includes(hoveredArticleId) : false;
             return (
               <g
-                key={i}
+                key={event.key}
                 style={{ cursor: "pointer" }}
-                onClick={() => onBubbleClick?.(bubble.id)}
+                onClick={() => onBubbleClick?.(event.primaryId)}
                 onMouseEnter={() => {
-                  onBubbleHover?.(bubble.id);
-                  setTooltip({ x: bubble.x, y: bubble.y, headline: bubble.headline });
+                  onBubbleHover?.(event.primaryId);
+                  clearHideTooltipTimer();
+                  setTooltip({ x: event.x, y: event.y, primaryId: event.primaryId, headlines: event.headlines });
                 }}
-                onMouseLeave={() => {
-                  onBubbleHover?.(null);
-                  setTooltip(null);
-                }}
+                onMouseLeave={scheduleTooltipHide}
               >
                 <line
-                  x1={bubble.x}
-                  y1={bubble.y}
-                  x2={bubble.x}
+                  x1={event.x}
+                  y1={event.y}
+                  x2={event.x}
                   y2={height - padding.bottom}
-                  stroke={bubble.color}
+                  stroke={event.color}
                   strokeDasharray="4"
                   strokeWidth={isHovered ? 2 : 1}
                   opacity={isHovered ? 1 : 0.5}
                 />
                 {/* Larger invisible hit area */}
-                <circle cx={bubble.x} cy={bubble.y} r="14" fill="transparent" />
+                <circle cx={event.x} cy={event.y} r="14" fill="transparent" />
                 {/* BPS label */}
-                <rect x={bubble.x - 22} y={bubble.y - 32} width="44" height="18" rx="4" fill={bubble.color} opacity="0.15" />
-                <rect x={bubble.x - 22} y={bubble.y - 32} width="44" height="18" rx="4" fill="none" stroke={bubble.color} strokeWidth="1" opacity="0.6" />
-                <text x={bubble.x} y={bubble.y - 19} textAnchor="middle" fill={bubble.color} fontSize="9" fontWeight="bold">
-                  {bubble.bpsLabel}
+                <rect x={event.x - 22} y={event.y - 32} width="44" height="18" rx="4" fill={event.color} opacity="0.15" />
+                <rect x={event.x - 22} y={event.y - 32} width="44" height="18" rx="4" fill="none" stroke={event.color} strokeWidth="1" opacity="0.6" />
+                <text x={event.x} y={event.y - 19} textAnchor="middle" fill={event.color} fontSize="9" fontWeight="bold">
+                  {event.bpsLabel}
                 </text>
                 {/* Glow ring when hovered */}
                 {isHovered && (
-                  <circle cx={bubble.x} cy={bubble.y} r="10" fill="none" stroke={bubble.color} strokeWidth="2" opacity="0.4" />
+                  <circle cx={event.x} cy={event.y} r="10" fill="none" stroke={event.color} strokeWidth="2" opacity="0.4" />
                 )}
-                <circle cx={bubble.x} cy={bubble.y} r={isHovered ? 8 : 6} fill={bubble.color} />
+                <circle cx={event.x} cy={event.y} r={isHovered ? 8 : 6} fill={event.color} />
               </g>
             );
           })}
@@ -245,14 +348,32 @@ export default function PriceChart({
         {/* Tooltip */}
         {tooltip && (
           <div
-            className="absolute z-20 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white max-w-[220px] pointer-events-none shadow-xl"
+            className="absolute z-20 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white max-w-[320px] max-h-[180px] overflow-y-auto pointer-events-auto shadow-xl"
             style={{
               left: `${(tooltip.x / 1000) * 100}%`,
               top: `${(tooltip.y / 300) * 100}%`,
               transform: "translate(-50%, -130%)",
             }}
+            onMouseEnter={() => {
+              clearHideTooltipTimer();
+              onBubbleHover?.(tooltip.primaryId);
+            }}
+            onMouseLeave={scheduleTooltipHide}
           >
-            {tooltip.headline}
+            <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">
+              {tooltip.headlines.length} News Item{tooltip.headlines.length === 1 ? "" : "s"}
+            </div>
+            <div className="space-y-1.5">
+              {tooltip.headlines.map((item) => (
+                <div key={item.id} className="flex items-start gap-2">
+                  <span
+                    className="mt-1 w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <span className="leading-snug text-slate-100">{item.headline}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -318,4 +439,3 @@ export default function PriceChart({
     </div>
   );
 }
-
