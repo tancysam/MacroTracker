@@ -37,7 +37,7 @@ export default function PriceChart({
 
     try {
       const res = await fetch(
-        `/api/market-data?symbol=${encodeURIComponent(instrument.yahooSymbol)}&from=${from}&to=${now}`
+        `/api/market-data?symbol=${encodeURIComponent(instrument.finnhubSymbol)}&from=${from}&to=${now}`
       );
       const data = await res.json();
       if (data.s === "ok" || (data.t && data.c)) {
