@@ -213,7 +213,7 @@ export default function PriceChart(props: PriceChartProps) {
     });
 
     return (
-      <div className="relative">
+      <div className="relative overflow-visible">
         <svg
           ref={svgRef}
           viewBox={`0 0 ${width} ${height}`}
@@ -345,12 +345,28 @@ export default function PriceChart(props: PriceChartProps) {
 
         {/* Tooltip */}
         {tooltip && (
+          (() => {
+            const tooltipAnchor =
+              tooltip.x < 180 ? "left" : tooltip.x > 820 ? "right" : "center";
+            const tooltipTransform =
+              tooltipAnchor === "left"
+                ? "translate(0, -130%)"
+                : tooltipAnchor === "right"
+                  ? "translate(-100%, -130%)"
+                  : "translate(-50%, -130%)";
+            const tooltipWidth =
+              tooltipAnchor === "right"
+                ? "min(28rem, calc(100vw - 2rem))"
+                : "min(24rem, calc(100vw - 2rem))";
+
+            return (
           <div
-            className="absolute z-20 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white max-w-[320px] max-h-[180px] overflow-y-auto pointer-events-auto shadow-xl"
+            className="absolute z-20 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white max-h-[180px] overflow-y-auto pointer-events-auto shadow-xl"
             style={{
+              width: tooltipWidth,
               left: `${(tooltip.x / 1000) * 100}%`,
               top: `${(tooltip.y / 300) * 100}%`,
-              transform: "translate(-50%, -130%)",
+              transform: tooltipTransform,
             }}
             onMouseEnter={() => {
               clearHideTooltipTimer();
@@ -373,13 +389,15 @@ export default function PriceChart(props: PriceChartProps) {
               ))}
             </div>
           </div>
+            );
+          })()
         )}
       </div>
     );
   };
 
   return (
-    <div className="w-full bg-slate-900/20 border border-slate-800/50 rounded-2xl p-8 relative min-h-[400px]">
+    <div className="w-full bg-slate-900/20 border border-slate-800/50 rounded-2xl p-8 relative min-h-[400px] overflow-visible">
       {/* Legend */}
       <div className="absolute top-8 left-8 flex gap-8 z-10">
         <div className="flex items-center gap-2">
