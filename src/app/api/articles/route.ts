@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { TOPIC_KEYWORDS } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +26,10 @@ function buildTopicFilterClauses(topics: string[]): string {
 }
 
 export async function GET(request: NextRequest) {
+  const authClient = await createSupabaseServerClient();
+  const { data: { user } } = await authClient.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   try {
     const { searchParams } = request.nextUrl;
     const topicsParam = searchParams.get("topics");
