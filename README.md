@@ -56,9 +56,14 @@ linkScore = 0.4 × semantic_similarity
 
 The top 5 connected articles are selected. Active filters (entity type, time window, sentiment, link threshold) affect both the candidate pool and how each component is scored — results are consistent for identical inputs.
 
-### AI Chat Assistant
+### AI Chat Assistant (RAG-Powered)
 
-A floating chat assistant (MacroTracker AI) is available on all pages. Powered by OpenAI, it answers macroeconomic questions, explains market concepts, and links directly to relevant Timeline or Associations views within the platform.
+A floating chat assistant (MacroTracker AI) is available on all pages. It goes beyond a generic LLM by combining **Retrieval-Augmented Generation (RAG)** with platform-aware navigation:
+
+- **RAG pipeline** — every user query is embedded via `text-embedding-3-small` and matched against all stored article vectors in Supabase pgvector. The most semantically relevant articles are retrieved and injected into the model context before a response is generated. This grounds answers in real ingested news, dramatically reducing hallucinations and increasing factual accuracy for macro questions.
+- **Grounded responses** — the assistant explicitly distinguishes between claims backed by retrieved articles and general framework knowledge, and will surface article headlines, sources, and publication dates as evidence.
+- **Platform navigation** — responses include direct Markdown links to relevant Dashboard, Timeline, Associations, or Article Detail views so analysts can jump straight to the underlying source material.
+- **Chat History & Institutional Memory** — authenticated users' conversations are persisted in the Supabase `chat_sessions` table. A **Chat History panel** lets users browse, reload, and continue previous sessions. Because the entire article database is also permanent, the assistant can answer questions about events from months ago with the same fidelity as today's news — forming a continuous institutional memory layer over the platform.
 
 ---
 
@@ -92,9 +97,74 @@ An interactive D3 force-directed graph anchored to a focus article.
 - **Left filter panel** — entity type toggles, time window (7D / 1M / 3M / 6M), sentiment filter, link threshold slider (0.4–0.95)
 - **Right detail panel** — headline, source, date, magnitude, sentiment, linkScore component breakdown bars, key entities
 
+### Article Detail
+
+Each article has a dedicated detail page (`/article/[id]`) providing:
+
+- Full headline, summary, source, publication date, sentiment badge, and magnitude score
+- **Market Impacts** panel — AI-derived risk implications mapped to specific instruments (equities, rates, FX, commodities)
+- Entity tags broken down by type
+- Direct links to the article's Timeline and Associations views
+
 ### Semantic Search
 
 Available from the nav header on all pages. Queries are vectorised and matched against stored article embeddings via Supabase pgvector. Results slide in as an overlay panel without navigating away. Each result has the same Timeline / Associations actions as Dashboard cards.
+
+### Authentication & User Accounts
+
+Supabase Auth (email/password) gates personal features:
+
+- Secure login at `/login` with email confirmation flow
+- Password update via `/auth/update-password`
+- Chat history and session storage are scoped per authenticated user — each analyst maintains their own institutional memory
+
+---
+
+## Hackathon Criteria
+
+MacroTracker was designed to meet every element of the challenge brief:
+
+### Track how a particular topic evolves over time
+
+The **Timeline** page is built specifically for this. Any topic, entity, or trending term can be opened as a scoped news timeline showing every ingested article for that topic in chronological order. A live market price chart (equities, rates, FX, commodities) is overlaid with event bubbles at the exact publication dates of relevant articles, letting analysts see at a glance how price action responded to breaking news. Sentiment filters (Bullish / Bearish / Neutral) further isolate directional narrative shifts over the chosen period (1M / 3M / 6M / 1Y / ALL).
+
+### Identify when a theme becomes "hot" or "cool"
+
+The **HeatScore** system provides a quantitative momentum signal per entity:
+
+```
+heatScore = (mentions_this_week - mentions_last_week) / mentions_last_week × 100
+```
+
+Computed every 15 minutes and surfaced in the **Trending panel** on the Dashboard, HeatScore ranks every tracked entity — companies, people, markets, policies, topics — by how rapidly it is accelerating or decelerating in news coverage. The composite article sort (`0.6 × norm(heatScore) + 0.4 × recency_decay`) ensures the most momentum-loaded stories surface at the top of the feed automatically.
+
+### Connect related developments across regions or asset classes
+
+The **Associations graph** maps cross-cutting linkages between any two articles using a four-component weighted formula:
+
+```
+linkScore = 0.4 × semantic_similarity
+           + 0.3 × entity_overlap
+           + 0.2 × magnitude_proximity
+           + 0.1 × sentiment_match
+```
+
+Because semantic similarity is computed over dense pgvector embeddings rather than keyword overlap, the engine surfaces thematic connections that span geographies and asset classes — e.g. linking a Fed rate decision to an EM currency stress article even when no single keyword is shared. The sliding-window expansion mechanic (max 3 levels deep) lets analysts trace chains of related events without the graph becoming unreadable.
+
+### Maintain institutional memory of past discussions
+
+Institutional memory is built into the platform at two levels:
+
+1. **Persistent article database** — every ingested article and its full metadata (entities, sentiment, magnitude, embedding) is stored permanently in Supabase. The AI assistant and semantic search can surface articles from months ago with identical fidelity to today's news.
+2. **RAG-powered chat history** — the AI Chat assistant persists each user's conversation sessions in the `chat_sessions` table. Analysts can return to prior research threads, reload context, and continue where they left off. Because the assistant retrieves supporting evidence from the article database at query time, answers about past macro events are grounded in the original source material rather than model memory alone.
+
+### Provide an intuitive dashboard to allow users to navigate and reference source articles as required
+
+The **Dashboard** is the central navigation hub: topic chip filters scope the feed instantly, composite ranking ensures nothing important is buried, and every news card exposes one-click actions to open the full article detail, its Timeline, or its Associations graph. The **Semantic Search** overlay (available on every page) lets users retrieve past articles by describing the event in natural language. The **Article Detail** page consolidates the full article text, AI-extracted entities, market impact analysis, and navigation links in one place.
+
+### Propose risk implications of each macro theme
+
+The **Article Detail** page includes an AI-generated **Market Impacts** panel that maps each article's findings to instrument-level risk implications across equities, rates, FX, and commodities. The **Magnitude Score** (0–10, LLM-assigned) attached to every article provides a consistent, comparable severity signal across the entire dataset. The **AI Chat assistant** (RAG-powered — see above) can be queried directly: _"What are the rate risk implications of the latest ECB commentary?"_ and will ground its answer in the actual retrieved articles.
 
 ---
 
