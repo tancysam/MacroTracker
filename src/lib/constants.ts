@@ -111,13 +111,13 @@ export const TOPIC_GROUPS: TopicGroup[] = [
 // Flat list of all topics for backward compatibility
 export const TOPIC_CHIPS = ["All News", ...TOPIC_GROUPS.flatMap((g) => g.topics)] as const;
 
-export const MARKET_INSTRUMENTS: Record<string, { symbol: string; finnhubSymbol: string }> = {
-  "US 10Y Yield": { symbol: "US10Y",  finnhubSymbol: "TLT" },
-  "S&P 500":      { symbol: "SPX",    finnhubSymbol: "SPY" },
-  "EUR/USD":      { symbol: "EURUSD", finnhubSymbol: "OANDA:EUR_USD" },
-  "Gold":         { symbol: "XAU",    finnhubSymbol: "OANDA:XAU_USD" },
-  "Brent Crude":  { symbol: "BRENT",  finnhubSymbol: "OANDA:BRENT_USD" },
-  "DXY Index":    { symbol: "DXY",    finnhubSymbol: "OANDA:DXY" },
+export const MARKET_INSTRUMENTS: Record<string, { symbol: string; yahooSymbol: string }> = {
+  "US 10Y Yield": { symbol: "US10Y", yahooSymbol: "^TNX" },
+  "S&P 500":      { symbol: "SPX", yahooSymbol: "^GSPC" },
+  "EUR/USD":      { symbol: "EURUSD", yahooSymbol: "EURUSD=X" },
+  "Gold":         { symbol: "XAU", yahooSymbol: "GC=F" },
+  "Brent Crude":  { symbol: "BRENT", yahooSymbol: "BZ=F" },
+  "DXY Index":    { symbol: "DXY", yahooSymbol: "DX-Y.NYB" },
 };
 
 export const ENTITY_TYPE_COLORS: Record<string, string> = {

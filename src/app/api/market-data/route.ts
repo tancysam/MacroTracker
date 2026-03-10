@@ -2,29 +2,50 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-// Simple in-memory cache (per instance) — unchanged from before
+// Simple in-memory cache (per instance)
 const cache = new Map<string, { data: unknown; timestamp: number }>();
 const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
 
-// Auto-detect Finnhub endpoint from symbol prefix:
-//   "OANDA:*"   → forex candle endpoint
-//   "BINANCE:*" → crypto candle endpoint
-//   anything else → stock candle endpoint
-function getFinnhubUrl(symbol: string, from: string, to: string, apiKey: string): string {
-  const base = "https://finnhub.io/api/v1";
-  const params = `symbol=${encodeURIComponent(symbol)}&resolution=D&from=${from}&to=${to}&token=${apiKey}`;
+let crumbCache: { crumb: string; cookie: string; timestamp: number } | null = null;
+const CRUMB_TTL = 60 * 60 * 1000; // 1 hour
 
-  if (symbol.startsWith("OANDA:"))   return `${base}/forex/candle?${params}`;
-  if (symbol.startsWith("BINANCE:")) return `${base}/crypto/candle?${params}`;
-  return `${base}/stock/candle?${params}`;
+async function getYahooCrumb(): Promise<{ crumb: string; cookie: string }> {
+  if (crumbCache && Date.now() - crumbCache.timestamp < CRUMB_TTL) {
+    return crumbCache;
+  }
+
+  const consentRes = await fetch("https://fc.yahoo.com", {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Accept": "text/html",
+    },
+  });
+  const rawCookies = consentRes.headers.getSetCookie?.() ?? [];
+  const cookie = rawCookies.map((c) => c.split(";")[0]).join("; ");
+
+  const crumbRes = await fetch(
+    "https://query1.finance.yahoo.com/v1/test/getcrumb",
+    {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Cookie": cookie,
+      },
+    }
+  );
+  const crumb = await crumbRes.text();
+
+  crumbCache = { crumb, cookie, timestamp: Date.now() };
+  return { crumb, cookie };
 }
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = request.nextUrl;
-    const symbol = searchParams.get("symbol"); // now a Finnhub symbol e.g. "OANDA:BRENT_USD"
-    const from   = searchParams.get("from");   // unix timestamp
-    const to     = searchParams.get("to");     // unix timestamp
+    const symbol = searchParams.get("symbol");
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
 
     if (!symbol || !from || !to) {
       return NextResponse.json(
@@ -33,40 +54,38 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Check in-memory cache first
     const cacheKey = `${symbol}-${from}-${to}`;
     const cached = cache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       return NextResponse.json(cached.data);
     }
 
-    const apiKey = process.env.FINNHUB_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "FINNHUB_API_KEY environment variable is not set" },
-        { status: 500 }
-      );
-    }
+    const { crumb, cookie } = await getYahooCrumb();
 
-    const url = getFinnhubUrl(symbol, from, to, apiKey);
-    const res = await fetch(url);
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&period1=${from}&period2=${to}&crumb=${encodeURIComponent(crumb)}`;
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Cookie": cookie,
+      },
+    });
 
     if (!res.ok) {
-      return NextResponse.json(
-        { error: `Finnhub returned ${res.status}` },
-        { status: 502 }
-      );
+      if (res.status === 401 || res.status === 403) crumbCache = null;
+      return NextResponse.json({ error: `Yahoo Finance returned ${res.status}` }, { status: 502 });
     }
 
     const json = await res.json();
-
-    // Finnhub natively returns { s: "ok"|"no_data", t: [...], c: [...], ... }
-    // This is the same shape PriceChart.tsx already expects — pass straight through
-    if (!json || json.s === "no_data" || !json.t) {
+    const result = json?.chart?.result?.[0];
+    if (!result) {
       return NextResponse.json({ s: "no_data", t: [], c: [] });
     }
 
-    const data = { s: "ok", t: json.t as number[], c: json.c as number[] };
+    const t: number[] = result.timestamp || [];
+    const c: number[] = result.indicators?.quote?.[0]?.close || [];
+
+    const data = { s: "ok", t, c };
     cache.set(cacheKey, { data, timestamp: Date.now() });
 
     return NextResponse.json(data);
