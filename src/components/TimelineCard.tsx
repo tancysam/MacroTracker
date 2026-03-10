@@ -29,7 +29,6 @@ export default function TimelineCard({ article, isHighlighted, onHover }: Timeli
     ...(article.entities_policies || []),
   ].slice(0, 4);
 
-
   return (
     <div
       className="relative"

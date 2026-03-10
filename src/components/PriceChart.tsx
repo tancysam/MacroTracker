@@ -128,6 +128,7 @@ export default function PriceChart({
       return { x, label };
     });
 
+
     return (
       <div className="relative">
         <svg
