@@ -11,12 +11,12 @@ export default function NewsCard({ article }: { article: Article }) {
   const router = useRouter();
   const impacts = getMarketImpacts(article);
 
-  const allEntities = [
+  const allEntities = [...new Set([
     ...(article.entities_topics || []),
     ...(article.entities_markets || []),
     ...(article.entities_companies || []),
     ...(article.entities_policies || []),
-  ].slice(0, 4);
+  ])].slice(0, 4);
 
   const timeAgo = formatDistanceToNow(new Date(article.published_at), { addSuffix: true });
 

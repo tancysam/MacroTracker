@@ -11,6 +11,7 @@ import type { Article, Sentiment } from "@/lib/types";
 function TimelineContent() {
   const searchParams = useSearchParams();
   const topic = searchParams.get("topic") || "";
+  const entityType = searchParams.get("entity_type") || "";
 
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,6 +25,9 @@ function TimelineContent() {
     setLoading(true);
     try {
       const params = new URLSearchParams({ primary_topic_key: topic });
+      if (entityType) {
+        params.set("entity_type", entityType);
+      }
       if (sentimentFilter !== "All") {
         params.set("sentiment", sentimentFilter);
       }
@@ -43,7 +47,7 @@ function TimelineContent() {
     } finally {
       setLoading(false);
     }
-  }, [topic, sentimentFilter, minMagnitude]);
+  }, [topic, entityType, sentimentFilter, minMagnitude]);
 
   useEffect(() => {
     fetchArticles();

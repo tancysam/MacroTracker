@@ -1,15 +1,48 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
+import { generateEmbedding } from "@/lib/openai";
+import { getSupabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
-    if (!_openai) {
-        _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    }
-    return _openai;
+  if (!_openai) {
+    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return _openai;
 }
+
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+interface RetrievedArticle {
+  id: string;
+  headline: string;
+  summary: string | null;
+  source: string | null;
+  published_at: string;
+  sentiment: string | null;
+  magnitude: number | null;
+  primary_topic_key: string | null;
+  similarity: number;
+  rank_score?: number;
+}
+
+const CHAT_MODEL_MAIN = process.env.CHAT_MODEL_MAIN || "gpt-5.4-2026-03-05";
+const CHAT_MODEL_FALLBACK = process.env.CHAT_MODEL_FALLBACK || "gpt-5-nano-2025-08-07";
+
+function parseNumberEnv(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+const RAG_MATCH_THRESHOLD = parseNumberEnv(process.env.CHAT_RAG_MATCH_THRESHOLD, 0.2);
+const RAG_STRONG_MATCH_THRESHOLD = parseNumberEnv(process.env.CHAT_RAG_STRONG_MATCH_THRESHOLD, 0.33);
+const RAG_MATCH_COUNT = Math.max(1, Math.floor(parseNumberEnv(process.env.CHAT_RAG_MATCH_COUNT, 30)));
+const RAG_CONTEXT_COUNT = Math.max(1, Math.floor(parseNumberEnv(process.env.CHAT_RAG_CONTEXT_COUNT, 6)));
 
 const SYSTEM_PROMPT = `You are MacroTracker AI, an intelligent assistant embedded in a macroeconomic news intelligence platform designed for asset managers and financial professionals.
 
@@ -21,54 +54,170 @@ You help users with:
 
 The platform has these pages:
 
-- **Dashboard** (\`/\`) — Main news feed with Focus Topics filter sidebar, trending entities panel, and news cards. Articles can be filtered by topics and sorted by HeatScore, Recency, or Composite.
-- **Article Detail** (\`/article/[id]\`) — Detailed view of a specific article with summary, market impacts, entity tags, and links to timeline/associations.
-- **Timeline** (\`/timeline?topic=[TOPIC]\`) — Shows a price chart and chronological news timeline for a specific topic. Examples:
-  - /timeline?topic=Technology
-  - /timeline?topic=Gold
-  - /timeline?topic=Brent%20Crude
-  - /timeline?topic=US-China%20Relations
-  - /timeline?topic=Federal%20Reserve
-  - /timeline?topic=Russia-Ukraine
-- **Associations** (\`/associations?article=[ARTICLE_ID]\`) — Investigation view showing linked events, evidence trails, and an association graph for a specific article.
-
-## Available Topic Categories
-Equity Sectors, Foreign Exchange, Commodities, Credit & Banking, Geopolitics & Macro Risk, Fiscal Policy & Government, Emerging Markets, Private Markets, Real Estate, Regulation & Policy, ESG & Sustainability.
+- **Dashboard** (\`/\`) - Main news feed with Focus Topics filter sidebar, trending entities panel, and news cards.
+- **Article Detail** (\`/article/[id]\`) - Detailed view of a specific article with summary, market impacts, entity tags, and links to timeline/associations.
+- **Timeline** (\`/timeline?topic=[TOPIC]\`) - Shows a price chart and chronological news timeline for a specific topic.
+- **Associations** (\`/associations?article=[ARTICLE_ID]\`) - Investigation view showing linked events, evidence trails, and an association graph.
 
 ## Response Guidelines
 - Be concise and professional. Keep answers focused and actionable.
-- When suggesting a page, provide it as a markdown link: [link text](/path). The frontend will render these as clickable navigation links.
-- When asked about market topics, provide insightful analysis and suggest relevant timelines to explore.
-- Use bullet points for clarity when listing multiple items.
-- If you don't know something specific about current market conditions, say so honestly while still providing general framework knowledge.`;
+- For article-specific claims, rely on provided retrieval context.
+- If retrieval context has no strong matches, explicitly say no strong recent matches were found, then provide a general framework answer.
+- When suggesting app navigation, provide markdown links like [link text](/path).
+- Do not fabricate article facts that are not present in context.`;
+
+function toSafeMessages(value: unknown): ChatMessage[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((m): m is { role: unknown; content: unknown } => !!m && typeof m === "object")
+    .map((m) => ({ role: m.role, content: m.content }))
+    .filter((m): m is ChatMessage =>
+      (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim().length > 0
+    );
+}
+
+function isLatestIntent(query: string): boolean {
+  return /(latest|recent|newest|today|what'?s new|what is new|breaking|just happened)/i.test(query);
+}
+
+function computeRecencyBoost(publishedAt: string): number {
+  const ageMs = Date.now() - new Date(publishedAt).getTime();
+  const ageHours = Math.max(ageMs / (1000 * 60 * 60), 0);
+  return Math.exp(-ageHours / 72);
+}
+
+async function retrieveArticles(query: string): Promise<RetrievedArticle[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const embedding = await generateEmbedding(trimmed);
+  const { data, error } = await getSupabase().rpc("match_articles", {
+    query_embedding: JSON.stringify(embedding),
+    match_threshold: RAG_MATCH_THRESHOLD,
+    match_count: RAG_MATCH_COUNT,
+  });
+
+  if (error) {
+    throw new Error(`Retrieval failed: ${error.message}`);
+  }
+
+  const retrieved = (data || []) as RetrievedArticle[];
+  const latestIntent = isLatestIntent(trimmed);
+  const recencyWeight = latestIntent ? 0.35 : 0.15;
+
+  return retrieved
+    .map((a) => ({
+      ...a,
+      rank_score: (a.similarity || 0) + computeRecencyBoost(a.published_at) * recencyWeight,
+    }))
+    .sort((a, b) => (b.rank_score || 0) - (a.rank_score || 0));
+}
+
+function buildRetrievalContext(articles: RetrievedArticle[]): string {
+  if (articles.length === 0) return "No retrieved articles.";
+
+  return articles
+    .slice(0, RAG_CONTEXT_COUNT)
+    .map((a, i) => {
+      const published = new Date(a.published_at).toISOString();
+      return [
+        `[${i + 1}]`,
+        `id: ${a.id}`,
+        `headline: ${a.headline}`,
+        `source: ${a.source || "unknown"}`,
+        `published_at: ${published}`,
+        `sentiment: ${a.sentiment || "unknown"}`,
+        `magnitude: ${a.magnitude ?? "unknown"}`,
+        `topic: ${a.primary_topic_key || "unknown"}`,
+        `similarity: ${(a.similarity || 0).toFixed(3)}`,
+        `summary: ${a.summary || ""}`,
+        `article_link: /article/${a.id}`,
+      ].join("\n");
+    })
+    .join("\n\n");
+}
+
+async function generateChatCompletion(params: {
+  model: string;
+  messages: ChatMessage[];
+  retrievalContext: string;
+  noStrongMatches: boolean;
+}): Promise<string> {
+  const { model, messages, retrievalContext, noStrongMatches } = params;
+
+  const response = await getOpenAI().chat.completions.create({
+    model,
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: `Current date and time (UTC): ${new Date().toISOString()}` },
+      {
+        role: "system",
+        content: `Retrieved context (most relevant first):\n\n${retrievalContext}\n\nNo strong matches: ${noStrongMatches ? "yes" : "no"}.`,
+      },
+      ...messages.slice(-20),
+    ],
+    max_completion_tokens: 1024,
+  });
+
+  return response.choices[0]?.message?.content?.trim() || "";
+}
 
 export async function POST(request: NextRequest) {
-    try {
-        const { messages } = await request.json();
+  try {
+    const body = await request.json();
+    const messages = toSafeMessages(body?.messages);
 
-        if (!messages || !Array.isArray(messages)) {
-            return NextResponse.json({ error: "messages array is required" }, { status: 400 });
-        }
-
-        const response = await getOpenAI().chat.completions.create({
-            model: "gpt-5-nano-2025-08-07",
-            messages: [
-                { role: "system", content: SYSTEM_PROMPT },
-                ...messages.slice(-20), // keep last 20 messages for context
-            ],
-            max_completion_tokens: 1024,
-        });
-
-        const content = response.choices[0].message.content || "Sorry, I couldn't generate a response.";
-
-        return NextResponse.json({ message: content });
-    } catch (error: unknown) {
-        console.error("[chat] Error:", error);
-        let message = "Unknown error";
-        if (error instanceof Error) {
-            message = error.message;
-        }
-        // Return error details for debugging but keep 500 status
-        return NextResponse.json({ error: message, message: `I ran into an error: ${message}` }, { status: 200 });
+    if (messages.length === 0) {
+      return NextResponse.json({ error: "messages array is required" }, { status: 400 });
     }
+
+    const lastUserMessage = [...messages].reverse().find((m) => m.role === "user")?.content || "";
+
+    let retrievedArticles: RetrievedArticle[] = [];
+    try {
+      retrievedArticles = await retrieveArticles(lastUserMessage);
+    } catch (retrievalError) {
+      console.error("[chat] Retrieval error:", retrievalError);
+      retrievedArticles = [];
+    }
+
+    const contextArticles = retrievedArticles.slice(0, RAG_CONTEXT_COUNT);
+    const bestSimilarity = contextArticles[0]?.similarity || 0;
+    const noStrongMatches = contextArticles.length === 0 || bestSimilarity < RAG_STRONG_MATCH_THRESHOLD;
+    const retrievalContext = buildRetrievalContext(contextArticles);
+
+    let content = "";
+    let usedModel = CHAT_MODEL_MAIN;
+
+    try {
+      content = await generateChatCompletion({
+        model: CHAT_MODEL_MAIN,
+        messages,
+        retrievalContext,
+        noStrongMatches,
+      });
+    } catch (mainModelError) {
+      console.error("[chat] Main model error:", mainModelError);
+      usedModel = CHAT_MODEL_FALLBACK;
+      content = await generateChatCompletion({
+        model: CHAT_MODEL_FALLBACK,
+        messages,
+        retrievalContext,
+        noStrongMatches,
+      });
+    }
+
+    if (!content) {
+      const fallbackMessage = noStrongMatches
+        ? "I couldn't find strong recent matches in the news database for that query. I can still help with a general market framework if you want."
+        : "I couldn't generate a response from the model.";
+      return NextResponse.json({ message: fallbackMessage, model: usedModel });
+    }
+
+    return NextResponse.json({ message: content, model: usedModel });
+  } catch (error: unknown) {
+    console.error("[chat] Error:", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: message, message: `I ran into an error: ${message}` }, { status: 200 });
+  }
 }

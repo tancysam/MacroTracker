@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { Article } from "@/lib/types";
 import SentimentBadge from "./SentimentBadge";
 
@@ -11,6 +12,7 @@ interface TimelineCardProps {
 }
 
 export default function TimelineCard({ article, isHighlighted, onHover }: TimelineCardProps) {
+  const router = useRouter();
   const date = new Date(article.published_at);
   const month = date.toLocaleString("en-US", { month: "short" }).toUpperCase();
   const day = date.getDate().toString().padStart(2, "0");
@@ -47,11 +49,20 @@ export default function TimelineCard({ article, isHighlighted, onHover }: Timeli
 
       {/* Card */}
       <div
-        className={`bg-slate-900/10 border rounded-xl p-6 relative transition-all duration-200 ${
+        className={`bg-slate-900/10 border rounded-xl p-6 relative transition-all duration-200 cursor-pointer ${
           isHighlighted
             ? "border-[#00d4ff] shadow-[0_0_20px_rgba(0,212,255,0.15)]"
             : "border-slate-800 hover:border-[#00d4ff]/30"
         }`}
+        role="button"
+        tabIndex={0}
+        onClick={() => router.push(`/article/${article.id}`)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            router.push(`/article/${article.id}`);
+          }
+        }}
       >
         <div className="flex justify-between items-start mb-4">
           <div className="flex gap-2">
@@ -93,6 +104,7 @@ export default function TimelineCard({ article, isHighlighted, onHover }: Timeli
             <Link
               href={`/associations?article=${article.id}`}
               className="text-[10px] font-semibold text-[#00d4ff] opacity-60 hover:opacity-100 transition-opacity"
+              onClick={(e) => e.stopPropagation()}
             >
               View Associations →
             </Link>

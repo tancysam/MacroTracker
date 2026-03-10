@@ -45,6 +45,9 @@ export default function ArticlePage({ params }: { params: Promise<{ id: string }
 
     const impacts = getMarketImpacts(article);
     const timeAgo = formatDistanceToNow(new Date(article.published_at), { addSuffix: true });
+    const normalizedUrl = (article.url || "").trim();
+    const isKaggleSourceLink = /(^|\/)kaggle-dataset\//i.test(normalizedUrl);
+    const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(article.headline)}`;
 
     const tagSections: { label: string; items: string[]; color: string; type: string }[] = [
         {
@@ -223,7 +226,7 @@ export default function ArticlePage({ params }: { params: Promise<{ id: string }
                             Investigate Associations
                         </Link>
                         <a
-                            href={article.url}
+                            href={isKaggleSourceLink ? googleSearchUrl : normalizedUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-slate-800/50 border border-slate-700/50 text-slate-400 hover:text-white hover:border-slate-500 transition-all"
@@ -231,7 +234,7 @@ export default function ArticlePage({ params }: { params: Promise<{ id: string }
                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                             </svg>
-                            Read Original
+                            {isKaggleSourceLink ? "Search On Google" : "Read Original"}
                         </a>
                     </div>
                 </div>
