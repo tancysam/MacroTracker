@@ -25,36 +25,44 @@ A `text-embedding-3-small` vector is also generated per article for semantic ret
 
 ### Heat Score (Trending)
 
-Trending entities are ranked by HeatScore — a momentum signal:
+Trending entities are ranked by HeatScore — a momentum signal combining recency weighting and logarithmic amplification:
 
 ```
-heatScore = (mentions_this_week - mentions_last_week) / mentions_last_week × 100
+heatScore = (weighted_mentions_this_week - mentions_last_week) × ln(1 + weighted_mentions_this_week)
 ```
 
-Computed on a schedule and cached. Drives the Trending panel on the Dashboard and the composite article sort.
+Where mentions in the current week are decayed by a factor of 0.85 per day (recent mentions count more). Computed every 15 minutes and cached. Drives the Trending panel on the Dashboard and the composite article sort.
 
-### Composite Article Ranking
+### Dashboard Article Sorting
 
-The default Dashboard sort blends trend momentum with recency:
+The Dashboard provides two sort modes:
 
-```
-composite = 0.6 × norm(heatScore) + 0.4 × exp(−hours_since_published / 24)
-```
-
-HeatScore is normalised 0→1 across the current feed. Recency decays by half every 24 hours.
+- **Recency** — articles sorted by publication date, newest first
+- **Magnitude** — articles sorted by impact severity (0–10 LLM-assigned score), highest first
 
 ### LinkScore (Associations Graph)
 
-When a user opens the Associations view, MacroTracker scores every candidate article against the focus article using a deterministic weighted formula:
+When a user opens the Associations view, MacroTracker scores every candidate article against the focus article using a six-component weighted formula. Weights vary by association mode:
 
+**Broad mode** (0.30 threshold, 8 results):
 ```
-linkScore = 0.4 × semantic_similarity
-           + 0.3 × entity_overlap
-           + 0.2 × magnitude_proximity
-           + 0.1 × sentiment_match
+linkScore = 0.30 × semantic_similarity + 0.22 × entity_overlap + 0.13 × magnitude_proximity
+          + 0.10 × sentiment_match + 0.15 × temporal_context + 0.10 × market_impact_alignment
 ```
 
-The top 5 connected articles are selected. Active filters (entity type, time window, sentiment, link threshold) affect both the candidate pool and how each component is scored — results are consistent for identical inputs.
+**Balanced mode** (0.48 threshold, 6 results):
+```
+linkScore = 0.32 × semantic_similarity + 0.24 × entity_overlap + 0.13 × magnitude_proximity
+          + 0.10 × sentiment_match + 0.10 × temporal_context + 0.11 × market_impact_alignment
+```
+
+**Strict mode** (0.65 threshold, 5 results):
+```
+linkScore = 0.35 × semantic_similarity + 0.25 × entity_overlap + 0.13 × magnitude_proximity
+          + 0.10 × sentiment_match + 0.05 × temporal_context + 0.12 × market_impact_alignment
+```
+
+Temporal context rewards earlier events (same-day=0.6, progressing backward in time) and penalizes later events (max 0.35). Market impact alignment scores shared or aligned instrument directionality. Active filters (entity type, time window, sentiment, link threshold) affect both the candidate pool and scoring — results are consistent for identical inputs.
 
 ### AI Chat Assistant (RAG-Powered)
 
@@ -71,10 +79,11 @@ A floating chat assistant (MacroTracker AI) is available on all pages. It goes b
 
 ### Dashboard
 
-The landing page. News feed ranked by composite sort with:
+The landing page. News feed sortable by topic and importance:
 
 - **Left sidebar** — single-select topic chip filters (All News, Tech, Energy, Fed, ECB, Inflation, Labor, Crypto, etc.)
-- **Sort modes** — Composite (default), HeatScore, Recency
+- **Sort modes** — Recency (default), Magnitude
+- **Magnitude filters** — Any, High (7+), Critical (9+)
 - **News cards** — thumbnail, source, time, sentiment badge, magnitude score, headline, entity hashtags
 - **Hover actions** on each card: "Timeline →" and "Associations →"
 - **Right panel** — top trending entities ranked by HeatScore, each clickable to navigate to their Timeline
@@ -133,23 +142,23 @@ The **Timeline** page is built specifically for this. Any topic, entity, or tren
 The **HeatScore** system provides a quantitative momentum signal per entity:
 
 ```
-heatScore = (mentions_this_week - mentions_last_week) / mentions_last_week × 100
+heatScore = (weighted_mentions_this_week - mentions_last_week) × ln(1 + weighted_mentions_this_week)
 ```
 
-Computed every 15 minutes and surfaced in the **Trending panel** on the Dashboard, HeatScore ranks every tracked entity — companies, people, markets, policies, topics — by how rapidly it is accelerating or decelerating in news coverage. The composite article sort (`0.6 × norm(heatScore) + 0.4 × recency_decay`) ensures the most momentum-loaded stories surface at the top of the feed automatically.
+Where recent mentions are weighted more heavily (daily decay factor 0.85). Computed every 15 minutes and surfaced in the **Trending panel** on the Dashboard, HeatScore ranks every tracked entity — companies, people, markets, policies, topics — by how rapidly it is accelerating or decelerating in news coverage. The composite article sort (`0.6 × norm(heatScore) + 0.4 × recency_decay`) ensures the most momentum-loaded stories surface at the top of the feed automatically.
 
 ### Connect related developments across regions or asset classes
 
-The **Associations graph** maps cross-cutting linkages between any two articles using a four-component weighted formula:
+The **Associations graph** maps cross-cutting linkages between any two articles using a six-component weighted formula with mode-specific thresholds. The formula combines:
 
-```
-linkScore = 0.4 × semantic_similarity
-           + 0.3 × entity_overlap
-           + 0.2 × magnitude_proximity
-           + 0.1 × sentiment_match
-```
+- **Semantic similarity** (0.30–0.35 weight) — deep vector embeddings via pgvector
+- **Entity overlap** (0.22–0.25) — shared companies, people, markets, policies, topics  
+- **Magnitude proximity** (0.13) — alignment of event severity
+- **Sentiment match** (0.10) — alignment of directional bias (Bullish/Bearish/Neutral)
+- **Temporal context** (0.05–0.15) — rewards preceding events, penalizes later ones
+- **Market impact alignment** (0.10–0.12) — shared or aligned instrument directionality
 
-Because semantic similarity is computed over dense pgvector embeddings rather than keyword overlap, the engine surfaces thematic connections that span geographies and asset classes — e.g. linking a Fed rate decision to an EM currency stress article even when no single keyword is shared. The sliding-window expansion mechanic (max 3 levels deep) lets analysts trace chains of related events without the graph becoming unreadable.
+Because similarity is computed over dense embeddings rather than keyword overlap, the engine surfaces thematic connections that span geographies and asset classes — e.g. linking a Fed rate decision to an EM currency stress article even when no single keyword is shared. Three association modes (Broad, Balanced, Strict) tune sensitivity and specificity. The sliding-window expansion mechanic (max 3 levels deep) lets analysts trace chains of related events without the graph becoming unreadable.
 
 ### Maintain institutional memory of past discussions
 
