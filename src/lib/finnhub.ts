@@ -25,38 +25,3 @@ export interface FinnhubNewsItem {
   url: string;
 }
 
-export async function fetchMarketCandles(
-  symbol: string,
-  resolution: string,
-  from: number,
-  to: number,
-  type: "stock" | "forex" | "crypto" = "stock"
-): Promise<FinnhubCandle> {
-  let endpoint: string;
-  switch (type) {
-    case "forex":
-      endpoint = `${FINNHUB_BASE}/forex/candle`;
-      break;
-    case "crypto":
-      endpoint = `${FINNHUB_BASE}/crypto/candle`;
-      break;
-    default:
-      endpoint = `${FINNHUB_BASE}/stock/candle`;
-  }
-
-  const res = await fetch(
-    `${endpoint}?symbol=${encodeURIComponent(symbol)}&resolution=${resolution}&from=${from}&to=${to}&token=${getApiKey()}`
-  );
-  if (!res.ok) throw new Error(`Finnhub candle error: ${res.status}`);
-  return res.json();
-}
-
-export interface FinnhubCandle {
-  c: number[];
-  h: number[];
-  l: number[];
-  o: number[];
-  t: number[];
-  v: number[];
-  s: string;
-}
