@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
+
+/** Custom event name used to trigger history restore from NavHeader */
+export const CHAT_HISTORY_RESTORE_EVENT = "macrotracker:chat-restore";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
 interface Message {
@@ -35,13 +38,64 @@ export default function ChatBot() {
     const [loading, setLoading] = useState(false);
     const [panelSize, setPanelSize] = useState({ width: 480, height: 620 });
     const [hoveredArticle, setHoveredArticle] = useState<{ data: ArticlePreview; rect: DOMRect } | null>(null);
+    // Tracks the Supabase session id for the current conversation (null = not yet saved)
+    const [sessionId, setSessionId] = useState<string | null>(null);
     const articleCache = useRef<Map<string, ArticlePreview>>(new Map());
     const hoverHideTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
     const isResizing = useRef(false);
     const resizeStart = useRef({ x: 0, y: 0, w: 480, h: 620 });
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const router = useRouter();
+
+    // Derive a conversation title from the first user message
+    function deriveTitle(msgs: Message[]): string {
+        const first = msgs.find((m) => m.role === "user");
+        if (!first) return "New conversation";
+        return first.content.trim().slice(0, 80) || "New conversation";
+    }
+
+    // Debounced auto-save: called after every assistant reply
+    const saveSession = useCallback(async (msgs: Message[], sid: string | null) => {
+        if (saveTimeout.current) clearTimeout(saveTimeout.current);
+        saveTimeout.current = setTimeout(async () => {
+            try {
+                const res = await fetch("/api/chat/history", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        id: sid ?? undefined,
+                        title: deriveTitle(msgs),
+                        messages: msgs,
+                    }),
+                });
+                if (res.ok) {
+                    const json = await res.json();
+                    if (json.session?.id) setSessionId(json.session.id);
+                }
+            } catch { /* silent — not critical */ }
+        }, 800);
+    }, []);
+
+    // Listen for restore events dispatched from NavHeader
+    useEffect(() => {
+        async function onRestore(e: Event) {
+            const id = (e as CustomEvent<string>).detail;
+            try {
+                const res = await fetch(`/api/chat/history/${id}`);
+                if (!res.ok) return;
+                const json = await res.json();
+                const restored: Message[] = Array.isArray(json.session?.messages) ? json.session.messages : [];
+                if (restored.length === 0) return;
+                setMessages(restored);
+                setSessionId(id);
+                setIsOpen(true);
+            } catch { /* silent */ }
+        }
+        window.addEventListener(CHAT_HISTORY_RESTORE_EVENT, onRestore);
+        return () => window.removeEventListener(CHAT_HISTORY_RESTORE_EVENT, onRestore);
+    }, []);
 
     const handleArticleLinkEnter = useCallback(async (id: string, rect: DOMRect) => {
         if (hoverHideTimeout.current) clearTimeout(hoverHideTimeout.current);
@@ -134,10 +188,11 @@ export default function ChatBot() {
                 }),
             });
             const data = await res.json();
-            setMessages((prev) => [
-                ...prev,
-                { role: "assistant", content: data.message || data.error || "Something went wrong." },
-            ]);
+            const assistantMessage: Message = { role: "assistant", content: data.message || data.error || "Something went wrong." };
+            const finalMessages = [...updatedMessages, assistantMessage];
+            setMessages(finalMessages);
+            // Auto-save after every assistant reply
+            await saveSession(finalMessages, sessionId);
         } catch {
             setMessages((prev) => [
                 ...prev,
@@ -243,6 +298,11 @@ export default function ChatBot() {
     }), [router, handleArticleLinkEnter, handleArticleLinkLeave]);
 
     const INITIAL_MESSAGE = messages[0];
+
+    function handleClearChat() {
+        setMessages([INITIAL_MESSAGE]);
+        setSessionId(null);
+    }
 
     // Position the hover card above (or below if too close to top) the hovered link
     const hoverCardStyle = (() => {
@@ -369,7 +429,7 @@ export default function ChatBot() {
                             </div>
                         </div>
                         <button
-                            onClick={() => setMessages([INITIAL_MESSAGE])}
+                            onClick={handleClearChat}
                             className="text-[10px] text-slate-500 hover:text-white transition-colors px-2.5 py-1 rounded-md border border-slate-800 hover:border-slate-600 hover:bg-slate-800/40"
                         >
                             Clear chat

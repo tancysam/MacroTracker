@@ -4,14 +4,19 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
 import SearchPanel from "./SearchPanel";
+import ChatHistoryPanel from "./ChatHistoryPanel";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import type { User } from "@supabase/supabase-js";
+import { CHAT_HISTORY_RESTORE_EVENT } from "./ChatBot";
 
 export default function NavHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [user, setUser] = useState<User | null>(null);
 
@@ -48,6 +53,19 @@ export default function NavHeader() {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // Close profile dropdown when clicking outside
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
+        setShowProfileMenu(false);
+      }
+    }
+    if (showProfileMenu) {
+      document.addEventListener("mousedown", onClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [showProfileMenu]);
 
   async function handleSignOut() {
     const supabase = createSupabaseBrowserClient();
@@ -102,24 +120,58 @@ export default function NavHeader() {
         </form>
 
         <div className="flex items-center gap-3">
-          <div
-            title={user?.email ?? ""}
-            className="h-8 w-8 rounded-full bg-[#00d4ff]/20 flex items-center justify-center text-[#00d4ff] font-bold text-xs select-none"
-          >
-            {getUserInitials(user)}
+          {/* Avatar — click to open profile dropdown */}
+          <div className="relative" ref={profileMenuRef}>
+            <button
+              onClick={() => setShowProfileMenu((v) => !v)}
+              title={user?.email ?? ""}
+              aria-label="Profile menu"
+              aria-expanded={showProfileMenu}
+              className="h-8 w-8 rounded-full bg-[#00d4ff]/20 hover:bg-[#00d4ff]/35 border border-[#00d4ff]/20 hover:border-[#00d4ff]/50 flex items-center justify-center text-[#00d4ff] font-bold text-xs select-none transition-all cursor-pointer"
+            >
+              {getUserInitials(user)}
+            </button>
+
+            {showProfileMenu && (
+              <div className="absolute right-0 mt-2 w-52 bg-[#0d1117] border border-[#1e2530] rounded-xl shadow-2xl shadow-black/60 py-1 z-50 animate-[slideUp_0.12s_ease-out]">
+                {/* User info */}
+                <div className="px-4 py-2.5 border-b border-[#1e2530]">
+                  <p className="text-[11px] text-slate-500 truncate">{user?.email ?? ""}</p>
+                </div>
+
+                {/* History */}
+                <button
+                  onClick={() => { setShowProfileMenu(false); setShowHistory(true); }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-[#111520] transition-colors"
+                >
+                  <span className="material-symbols-outlined text-base text-[#00d4ff]">history</span>
+                  Chat history
+                </button>
+
+                {/* Sign out */}
+                <button
+                  onClick={() => { setShowProfileMenu(false); handleSignOut(); }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-[#111520] transition-colors rounded-b-xl"
+                >
+                  <span className="material-symbols-outlined text-base text-slate-400">logout</span>
+                  Sign out
+                </button>
+              </div>
+            )}
           </div>
-          <button
-            onClick={handleSignOut}
-            title="Sign out"
-            className="text-slate-400 hover:text-[#00d4ff] transition-colors"
-          >
-            <span className="material-symbols-outlined text-xl">logout</span>
-          </button>
         </div>
       </header>
 
       {showSearch && (
         <SearchPanel query={searchQuery} onClose={() => setShowSearch(false)} />
+      )}
+      {showHistory && (
+        <ChatHistoryPanel
+          onClose={() => setShowHistory(false)}
+          onRestore={(sessionId) => {
+            window.dispatchEvent(new CustomEvent(CHAT_HISTORY_RESTORE_EVENT, { detail: sessionId }));
+          }}
+        />
       )}
     </>
   );

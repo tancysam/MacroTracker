@@ -34,3 +34,9 @@ input[type=range]::-webkit-slider-thumb { height: 14px; width: 14px; border-radi
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Chat history panel slide-in from right */
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(100%); }
+  to { opacity: 1; transform: translateX(0); }
+}
