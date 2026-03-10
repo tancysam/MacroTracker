@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
+import { createSupabaseBrowserClient } from "@/lib/supabase";
 
 interface Message {
     role: "user" | "assistant";
@@ -22,6 +23,7 @@ interface ArticlePreview {
 
 export default function ChatBot() {
     const [isOpen, setIsOpen] = useState(false);
+    const [authenticated, setAuthenticated] = useState(false);
     const [messages, setMessages] = useState<Message[]>([
         {
             role: "assistant",
@@ -91,6 +93,15 @@ export default function ChatBot() {
 
     const scrollToBottom = useCallback(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, []);
+
+    useEffect(() => {
+        const supabase = createSupabaseBrowserClient();
+        supabase.auth.getUser().then(({ data }) => setAuthenticated(!!data.user));
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setAuthenticated(!!session?.user);
+        });
+        return () => subscription.unsubscribe();
     }, []);
 
     useEffect(() => {
@@ -245,6 +256,8 @@ export default function ChatBot() {
         const left = Math.min(Math.max(rect.left, 8), window.innerWidth - cardWidth - 8);
         return { top, left, width: cardWidth };
     })();
+
+    if (!authenticated) return null;
 
     return (
         <>
