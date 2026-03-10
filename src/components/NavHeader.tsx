@@ -82,7 +82,7 @@ export default function NavHeader() {
 
   return (
     <>
-      <header className="sticky top-0 z-50 flex items-center justify-between border-b border-[#1e2530] bg-[#080b12]/80 backdrop-blur-md px-6 py-3 lg:px-20 shrink-0">
+      <header className="sticky top-0 z-50 relative flex items-center justify-between border-b border-[#1e2530] bg-[#080b12]/80 backdrop-blur-md px-6 py-3 lg:px-20 shrink-0">
         <div className="flex items-center gap-8">
           <Link href="/" className="flex items-center gap-3 text-[#00d4ff]">
             <span className="material-symbols-outlined text-3xl font-bold">blur_on</span>
@@ -105,7 +105,7 @@ export default function NavHeader() {
           </nav>
         </div>
 
-        <form onSubmit={handleSearch} className="flex items-center gap-4 flex-1 justify-center max-w-xl px-4">
+        <form onSubmit={handleSearch} className="absolute left-1/2 -translate-x-1/2 w-full max-w-2xl px-4">
           <div className="flex w-full items-stretch rounded-lg bg-slate-800 h-10 px-3">
             <span className="material-symbols-outlined self-center text-slate-500">search</span>
             <input
@@ -119,7 +119,7 @@ export default function NavHeader() {
           </div>
         </form>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 justify-end">
           {/* Avatar — click to open profile dropdown */}
           <div className="relative" ref={profileMenuRef}>
             <button
