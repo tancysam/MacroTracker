@@ -86,7 +86,6 @@ function TimelineContent() {
             sentiment: a.sentiment,
           }))}
           onBubbleClick={(id) => setHighlightedId(id)}
-          onBubbleHover={(id) => setHighlightedId(id)}
           hoveredArticleId={highlightedId}
         />
       </div>

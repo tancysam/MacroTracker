@@ -69,7 +69,7 @@ export default function PriceChart({
 
     const width = 1000;
     const height = 300;
-    const padding = { top: 40, right: 20, bottom: 20, left: 0 };
+    const padding = { top: 40, right: 20, bottom: 36, left: 56 };
     const chartW = width - padding.left - padding.right;
     const chartH = height - padding.top - padding.bottom;
 
@@ -119,6 +119,16 @@ export default function PriceChart({
       return { val: val.toFixed(2), y };
     });
 
+    const xTickCount = 5;
+    const xLabels = Array.from({ length: xTickCount }, (_, i) => {
+      const idx = Math.round((i / (xTickCount - 1)) * (times.length - 1));
+      const x = padding.left + (idx / (prices.length - 1)) * chartW;
+      const date = new Date(times[idx] * 1000);
+      const label = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      return { x, label };
+    });
+
+
     return (
       <div className="relative">
         <svg
@@ -138,6 +148,44 @@ export default function PriceChart({
               strokeDasharray="4"
               strokeWidth="1"
             />
+          ))}
+
+          {/* Axis lines */}
+          <line x1={padding.left} y1={padding.top} x2={padding.left} y2={padding.top + chartH} stroke="#334155" strokeWidth="1" />
+          <line x1={padding.left} y1={padding.top + chartH} x2={width - padding.right} y2={padding.top + chartH} stroke="#334155" strokeWidth="1" />
+
+          {/* Y-axis labels */}
+          {yLabels.map((label, i) => (
+            <text
+              key={i}
+              x={padding.left - 8}
+              y={label.y + 4}
+              textAnchor="end"
+              fill="#475569"
+              fontSize="10"
+            >
+              {label.val}
+            </text>
+          ))}
+
+          {/* X-axis labels */}
+          {xLabels.map((tick, i) => (
+            <g key={i}>
+              <line
+                x1={tick.x} y1={padding.top + chartH}
+                x2={tick.x} y2={padding.top + chartH + 4}
+                stroke="#334155" strokeWidth="1"
+              />
+              <text
+                x={tick.x}
+                y={padding.top + chartH + 16}
+                textAnchor="middle"
+                fill="#475569"
+                fontSize="10"
+              >
+                {tick.label}
+              </text>
+            </g>
           ))}
 
           {/* Price line */}
