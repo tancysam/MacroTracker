@@ -149,6 +149,7 @@ async function generateChatCompletion(params: {
     model,
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: `Current date and time (UTC): ${new Date().toISOString()}` },
       {
         role: "system",
         content: `Retrieved context (most relevant first):\n\n${retrievalContext}\n\nNo strong matches: ${noStrongMatches ? "yes" : "no"}.`,
