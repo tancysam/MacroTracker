@@ -187,16 +187,39 @@ export default function ChatBot() {
                     })),
                 }),
             });
-            const data = await res.json();
-            const assistantMessage: Message = { role: "assistant", content: data.message || data.error || "Something went wrong." };
+
+            if (!res.ok) {
+                const errorText = await res.text();
+                console.error("[chat] HTTP error:", res.status, errorText);
+                setMessages((prev) => [
+                    ...prev,
+                    { role: "assistant", content: `Server error (${res.status}): Unable to process your request. Please try again.` },
+                ]);
+                return;
+            }
+
+            let data;
+            try {
+                data = await res.json();
+            } catch (jsonError) {
+                console.error("[chat] JSON parse error:", jsonError);
+                setMessages((prev) => [
+                    ...prev,
+                    { role: "assistant", content: "Server returned invalid response. Please try again." },
+                ]);
+                return;
+            }
+
+            const assistantMessage: Message = { role: "assistant", content: data.message || "No response generated." };
             const finalMessages = [...updatedMessages, assistantMessage];
             setMessages(finalMessages);
             // Auto-save after every assistant reply
             await saveSession(finalMessages, sessionId);
-        } catch {
+        } catch (error) {
+            console.error("[chat] Unexpected client error:", error);
             setMessages((prev) => [
                 ...prev,
-                { role: "assistant", content: "Sorry, I couldn't connect to the server." },
+                { role: "assistant", content: "Sorry, I couldn't connect to the server. Please check your connection and try again." },
             ]);
         } finally {
             setLoading(false);

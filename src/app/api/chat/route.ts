@@ -204,12 +204,18 @@ export async function POST(request: NextRequest) {
     } catch (mainModelError) {
       console.error("[chat] Main model error:", mainModelError);
       usedModel = CHAT_MODEL_FALLBACK;
-      content = await generateChatCompletion({
-        model: CHAT_MODEL_FALLBACK,
-        messages,
-        retrievalContext,
-        noStrongMatches,
-      });
+      try {
+        content = await generateChatCompletion({
+          model: CHAT_MODEL_FALLBACK,
+          messages,
+          retrievalContext,
+          noStrongMatches,
+        });
+      } catch (fallbackModelError) {
+        console.error("[chat] Fallback model error:", fallbackModelError);
+        const errorMsg = fallbackModelError instanceof Error ? fallbackModelError.message : "Model unavailable";
+        return NextResponse.json({ message: `I encountered an error: ${errorMsg}. Please try again.`, model: usedModel, error: true }, { status: 200 });
+      }
     }
 
     if (!content) {
@@ -221,8 +227,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ message: content, model: usedModel });
   } catch (error: unknown) {
-    console.error("[chat] Error:", error);
+    console.error("[chat] Unexpected error:", error);
     const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: message, message: `I ran into an error: ${message}` }, { status: 200 });
+    return NextResponse.json({ message: `I ran into an error: ${message}. Please try again.`, error: true, model: "error" }, { status: 200 });
   }
 }
