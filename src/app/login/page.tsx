@@ -248,7 +248,13 @@ export default function LoginPage() {
           )}
         </div>
 
-        <p className="text-center text-slate-600 text-xs mt-6">
+        {/* Credentials notice */}
+        <div className="mt-5 rounded-lg border border-dashed border-red-500/60 bg-red-900/20 px-4 py-3 text-center text-red-300 text-xs leading-relaxed">
+          If you would like to obtain credentials for logging in, please contact{" "}
+          <span className="font-semibold text-red-200">@samtancy</span> on Telegram
+        </div>
+
+        <p className="text-center text-slate-600 text-xs mt-4">
           Access is restricted to authorised users only.
         </p>
       </div>
