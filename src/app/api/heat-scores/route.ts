@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { TRENDING_BLOCKLIST } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const authClient = await createSupabaseServerClient();
+  const { data: { user } } = await authClient.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   try {
     const { data: scores, error } = await getSupabase()
       .from("heat_scores")
