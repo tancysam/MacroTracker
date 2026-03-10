@@ -42,7 +42,7 @@ export default function TrendingPanel() {
             {entries.map((entry, index) => (
               <Link
                 key={entry.entity_name}
-                href={`/timeline?topic=${encodeURIComponent(entry.entity_name)}`}
+                href={`/timeline?topic=${encodeURIComponent(entry.entity_name)}&entity_type=${encodeURIComponent(entry.entity_type)}`}
                 className="flex flex-col gap-1 border-b border-slate-800 pb-3 hover:bg-slate-800/30 rounded px-1 transition-colors cursor-pointer"
               >
                 <div className="flex items-center justify-between">
