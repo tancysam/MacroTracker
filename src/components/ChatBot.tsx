@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -9,6 +9,15 @@ import type { Components } from "react-markdown";
 interface Message {
     role: "user" | "assistant";
     content: string;
+}
+
+interface ArticlePreview {
+    id: string;
+    headline: string;
+    summary: string | null;
+    published_at: string;
+    sentiment: string | null;
+    source: string | null;
 }
 
 export default function ChatBot() {
@@ -23,11 +32,35 @@ export default function ChatBot() {
     const [input, setInput] = useState("");
     const [loading, setLoading] = useState(false);
     const [panelSize, setPanelSize] = useState({ width: 480, height: 620 });
+    const [hoveredArticle, setHoveredArticle] = useState<{ data: ArticlePreview; rect: DOMRect } | null>(null);
+    const articleCache = useRef<Map<string, ArticlePreview>>(new Map());
+    const hoverHideTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
     const isResizing = useRef(false);
     const resizeStart = useRef({ x: 0, y: 0, w: 480, h: 620 });
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const router = useRouter();
+
+    const handleArticleLinkEnter = useCallback(async (id: string, rect: DOMRect) => {
+        if (hoverHideTimeout.current) clearTimeout(hoverHideTimeout.current);
+        if (articleCache.current.has(id)) {
+            setHoveredArticle({ data: articleCache.current.get(id)!, rect });
+            return;
+        }
+        try {
+            const res = await fetch(`/api/articles/${id}`);
+            if (res.ok) {
+                const json = await res.json();
+                const article: ArticlePreview = json.article;
+                articleCache.current.set(id, article);
+                setHoveredArticle({ data: article, rect });
+            }
+        } catch { /* ignore */ }
+    }, []);
+
+    const handleArticleLinkLeave = useCallback(() => {
+        hoverHideTimeout.current = setTimeout(() => setHoveredArticle(null), 180);
+    }, []);
 
     const onResizeMouseDown = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
@@ -111,8 +144,9 @@ export default function ChatBot() {
         }
     };
 
-    // Markdown component overrides — styled for the dark chat UI
-    const markdownComponents: Components = {
+    // Markdown component overrides — memoized so identity is stable across re-renders,
+    // preventing ReactMarkdown from remounting link buttons and re-firing onMouseEnter.
+    const markdownComponents: Components = useMemo(() => ({  // eslint-disable-line react-hooks/exhaustive-deps
         h1: ({ children }) => (
             <h1 className="text-base font-bold text-white mt-3 mb-1 first:mt-0">{children}</h1>
         ),
@@ -164,6 +198,7 @@ export default function ChatBot() {
         hr: () => <hr className="border-slate-700 my-2" />,
         a: ({ href, children }) => {
             const isInternal = href?.startsWith("/");
+            const articleMatch = href?.match(/^\/article\/([\w-]+)$/);
             if (isInternal) {
                 return (
                     <button
@@ -171,7 +206,12 @@ export default function ChatBot() {
                             router.push(href!);
                             setIsOpen(false);
                         }}
-                        className="text-[#00d4ff] hover:text-[#33ddff] underline underline-offset-2 font-medium transition-colors"
+                        onMouseEnter={articleMatch ? (e) => {
+                            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                            handleArticleLinkEnter(articleMatch[1], rect);
+                        } : undefined}
+                        onMouseLeave={articleMatch ? handleArticleLinkLeave : undefined}
+                        className="text-[#00d4ff] hover:text-[#33ddff] underline underline-offset-2 font-medium transition-colors cursor-pointer"
                     >
                         {children}
                     </button>
@@ -182,18 +222,77 @@ export default function ChatBot() {
                     href={href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[#00d4ff] hover:text-[#33ddff] underline underline-offset-2 font-medium transition-colors"
+                    className="text-[#00d4ff] hover:text-[#33ddff] underline underline-offset-2 font-medium transition-colors cursor-pointer"
                 >
                     {children}
                 </a>
             );
         },
-    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }), [router, handleArticleLinkEnter, handleArticleLinkLeave]);
 
     const INITIAL_MESSAGE = messages[0];
 
+    // Position the hover card above (or below if too close to top) the hovered link
+    const hoverCardStyle = (() => {
+        if (!hoveredArticle) return {};
+        const { rect } = hoveredArticle;
+        const cardHeight = 140;
+        const cardWidth = Math.min(panelSize.width - 24, 380);
+        const spaceAbove = rect.top;
+        const top = spaceAbove > cardHeight + 8 ? rect.top - cardHeight - 8 : rect.bottom + 8;
+        // Align horizontally to the link, clamped to viewport
+        const left = Math.min(Math.max(rect.left, 8), window.innerWidth - cardWidth - 8);
+        return { top, left, width: cardWidth };
+    })();
+
     return (
         <>
+            {/* Article hover preview card */}
+            {hoveredArticle && (
+                <div
+                    className="fixed z-[60] pointer-events-auto"
+                    style={hoverCardStyle}
+                    onMouseEnter={() => {
+                        if (hoverHideTimeout.current) clearTimeout(hoverHideTimeout.current);
+                    }}
+                    onMouseLeave={() => {
+                        hoverHideTimeout.current = setTimeout(() => setHoveredArticle(null), 180);
+                    }}
+                >
+                    <div className="bg-[#0d1117] border border-[#1e2530] rounded-xl shadow-2xl shadow-black/60 p-3 animate-[slideUp_0.15s_ease-out]">
+                        <div className="flex items-start justify-between gap-2 mb-1.5">
+                            <p className="text-[12px] font-semibold text-white leading-snug line-clamp-2">
+                                {hoveredArticle.data.headline}
+                            </p>
+                            {hoveredArticle.data.sentiment && (
+                                <span className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${
+                                    hoveredArticle.data.sentiment === "Bullish"
+                                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                        : hoveredArticle.data.sentiment === "Bearish"
+                                        ? "bg-red-500/10 text-red-400 border-red-500/20"
+                                        : "bg-slate-500/10 text-slate-400 border-slate-500/20"
+                                }`}>
+                                    {hoveredArticle.data.sentiment}
+                                </span>
+                            )}
+                        </div>
+                        {hoveredArticle.data.summary && (
+                            <p className="text-[11px] text-slate-400 leading-relaxed line-clamp-2 mb-2">
+                                {hoveredArticle.data.summary}
+                            </p>
+                        )}
+                        <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                            {hoveredArticle.data.source && (
+                                <span className="font-medium text-slate-400">{hoveredArticle.data.source}</span>
+                            )}
+                            {hoveredArticle.data.source && <span>·</span>}
+                            <span>{new Date(hoveredArticle.data.published_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* FAB Button */}
             <button
                 onClick={() => setIsOpen(!isOpen)}
@@ -224,11 +323,17 @@ export default function ChatBot() {
                     {/* Resize handle — top-left corner */}
                     <div
                         onMouseDown={onResizeMouseDown}
-                        className="absolute top-0 left-0 w-4 h-4 z-10 cursor-nw-resize group"
+                        className="absolute top-0 left-0 w-7 h-7 z-10 cursor-nw-resize flex items-center justify-center rounded-br-xl group hover:bg-[#00d4ff]/10 transition-colors"
                         title="Drag to resize"
                     >
-                        <svg className="w-3 h-3 text-slate-600 group-hover:text-[#00d4ff]/60 transition-colors m-0.5" viewBox="0 0 12 12" fill="currentColor">
-                            <path d="M0 2a1 1 0 011-1h1v1H1v1H0V2zm0 4V4h1v2H0zm0 2h1v1H1v1H0V8zm4-7h2V0H4v1zm4 0V0H6v1h2zm2 0h1v1h1V2a1 1 0 00-1-1h-1v1zm1 2v2h1V4h-1zm0 4v-2h1v2h-1zm-1 2h1v-1h1v-1h-1v1h-1v1zm-2 0v1h2v-1H8zm-4 1H4v-1H2v1h2z" />
+                        <svg className="w-4 h-4 text-slate-500 group-hover:text-[#00d4ff] transition-colors" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                            {/* Two diagonal double-headed arrows — standard resize affordance */}
+                            <line x1="2" y1="8" x2="8" y2="2" />
+                            <polyline points="2,5 2,8 5,8" />
+                            <polyline points="8,2 11,2 11,5" />
+                            <line x1="6" y1="14" x2="14" y2="6" />
+                            <polyline points="6,14 9,14 9,11" />
+                            <polyline points="14,6 14,9 11,9" />
                         </svg>
                     </div>
                     {/* Header */}
