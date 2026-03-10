@@ -18,7 +18,7 @@ type GroupedEvent = {
   x: number;
   y: number;
   color: string;
-  bpsLabel: string;
+  yValueLabel: string;
   primaryId: string;
   articleIds: string[];
   headlines: TooltipHeadline[];
@@ -168,9 +168,7 @@ export default function PriceChart(props: PriceChartProps) {
 
       const color =
         a.sentiment === "Bearish" ? "#ff4d6d" : a.sentiment === "Bullish" ? "#00f5d4" : "#fb8500";
-      const prevPrice = slotIdx > 0 ? prices[slotIdx - 1] : prices[slotIdx];
-      const bpsChange = Math.round((prices[slotIdx] - prevPrice) * 100);
-      const bpsLabel = bpsChange >= 0 ? `+${bpsChange}bps` : `${bpsChange}bps`;
+      const yValueLabel = interpPrice.toFixed(2);
 
       const existing = groupedBySlot.get(slotKey);
       if (existing) {
@@ -182,7 +180,7 @@ export default function PriceChart(props: PriceChartProps) {
           x: slotX,
           y: baseY,
           color,
-          bpsLabel,
+          yValueLabel,
           primaryId: a.id,
           articleIds: [a.id],
           headlines: [{ id: a.id, headline: a.headline, color }],
@@ -329,11 +327,11 @@ export default function PriceChart(props: PriceChartProps) {
                 />
                 {/* Larger invisible hit area */}
                 <circle cx={event.x} cy={event.y} r="14" fill="transparent" />
-                {/* BPS label */}
+                {/* Y-axis value label */}
                 <rect x={event.x - 22} y={event.y - 32} width="44" height="18" rx="4" fill={event.color} opacity="0.15" />
                 <rect x={event.x - 22} y={event.y - 32} width="44" height="18" rx="4" fill="none" stroke={event.color} strokeWidth="1" opacity="0.6" />
                 <text x={event.x} y={event.y - 19} textAnchor="middle" fill={event.color} fontSize="9" fontWeight="bold">
-                  {event.bpsLabel}
+                  {event.yValueLabel}
                 </text>
                 {/* Glow ring when hovered */}
                 {isHovered && (
