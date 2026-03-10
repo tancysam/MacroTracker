@@ -1,0 +1,155 @@
+# MacroTracker
+
+MacroTracker is a macro-financial news intelligence app built for fast signal discovery. It ingests live market news, enriches each article with AI metadata, computes trending entity heat scores, and provides three analysis surfaces:
+
+- `Dashboard`: ranked news feed with topic filtering and trending entities
+- `Timeline`: topic-scoped event timeline overlaid on market price history
+- `Associations`: interactive graph of related articles with deterministic link scoring
+
+## Tech stack
+
+- `Next.js 16` (App Router) + `React 19` + `TypeScript`
+- `Supabase Postgres` + `pgvector` for storage and semantic retrieval
+- `OpenAI` for embeddings and article metadata extraction
+- `Finnhub` for news ingestion
+- `Yahoo Finance chart API` for timeline market overlay data
+- `D3` for association graph rendering
+
+## Features
+
+- AI enrichment per article:
+  - sentiment (`Bullish`, `Bearish`, `Neutral`)
+  - magnitude score (`0-10`)
+  - entity extraction across topics, markets, people, companies, policies
+  - primary topic key/display
+- Semantic search from the global nav (`/api/search`)
+- Heat score ranking of entities (`/api/compute-heat-scores`, `/api/heat-scores`)
+- Composite article ranking:
+  - `0.6 * normalized_heat + 0.4 * exp(-hours_since_published / 24)`
+- Associations graph:
+  - top links with threshold/time/entity/sentiment filters
+  - expandable graph with a 3-level sliding window
+
+## Repository structure
+
+```text
+src/
+  app/
+    api/                     # ingestion, search, heat score, timeline, associations, market data routes
+    associations/page.tsx    # graph UI
+    timeline/page.tsx        # timeline + price chart UI
+    page.tsx                 # dashboard UI
+  components/                # cards, panels, graph + chart components
+  lib/                       # API clients, constants, types
+supabase/
+  migrations/
+    001_initial_schema.sql   # tables, indexes, pgvector functions
+```
+
+## Prerequisites
+
+- `Node.js 20+`
+- A Supabase project
+- An OpenAI API key
+- A Finnhub API key
+
+## Environment variables
+
+Copy `.env.example` to `.env.local` and fill in values:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+OPENAI_API_KEY=
+FINNHUB_API_KEY=
+```
+
+Notes:
+
+- `SUPABASE_SERVICE_ROLE_KEY` is required for ingestion and heat score compute routes.
+- Never expose the service role key in client code.
+
+## Database setup (Supabase)
+
+1. Open your Supabase SQL Editor.
+2. Run [`supabase/migrations/001_initial_schema.sql`](/C:/Users/tancysam/Documents/Dev/FintechHackathonAttempt/macrotracker/supabase/migrations/001_initial_schema.sql).
+
+This migration creates:
+
+- `articles`
+- `entity_mentions`
+- `heat_scores`
+- `match_articles(...)` RPC for semantic search
+- `article_similarity(...)` helper function
+- indexes and `vector` extension
+
+## Local development
+
+Install dependencies and start dev server:
+
+```bash
+npm install
+npm run dev
+```
+
+Open `http://localhost:3000`.
+
+## Data pipeline
+
+### Ingest news
+
+- Endpoint: `GET/POST /api/ingest`
+- Source: Finnhub general news
+- Behavior:
+  - inserts up to 30 articles per run
+  - deduplicates by `url_hash` (unique constraint)
+  - enriches each inserted article via OpenAI
+  - writes embeddings, metadata, and entity mentions
+
+Manual run:
+
+```bash
+curl -X POST http://localhost:3000/api/ingest
+```
+
+### Compute heat scores
+
+- Endpoint: `GET/POST /api/compute-heat-scores`
+- Formula:
+  - `(mentions_this_week - mentions_last_week) / mentions_last_week * 100`
+  - special case when last week is `0`: capped bootstrapped score
+
+Manual run:
+
+```bash
+curl -X POST http://localhost:3000/api/compute-heat-scores
+```
+
+## Scheduled jobs (Vercel)
+
+Configured in [`vercel.json`](/C:/Users/tancysam/Documents/Dev/FintechHackathonAttempt/macrotracker/vercel.json):
+
+- `/api/ingest` every 2 hours
+- `/api/compute-heat-scores` every 15 minutes
+
+## API surface (high level)
+
+- `GET /api/articles`: dashboard feed with `topic`, `sort`, `limit`
+- `GET /api/articles/timeline`: topic timeline
+- `GET /api/articles/:id/associations`: graph nodes/edges from a focus article
+- `POST /api/search`: semantic search via `match_articles` RPC
+- `GET /api/heat-scores`: trending entities list
+- `GET /api/market-data`: Yahoo Finance candles cache proxy
+
+## Deployment
+
+- Designed for Vercel deployment.
+- Add all environment variables in your Vercel project settings.
+- Ensure Supabase SQL migration has been applied before first ingest.
+
+## Current constraints
+
+- No authentication or multi-tenant separation.
+- Association "semantic similarity" currently uses a structural proxy in-route rather than direct vector-to-vector scoring there.
+- `api/market-data` currently proxies Yahoo Finance chart data (not Finnhub) for timeline overlays.
