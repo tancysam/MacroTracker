@@ -8,7 +8,18 @@ export async function POST() {
   try {
     const supabase = getServiceClient();
 
-    const now = new Date();
+    const { data: latestRow, error: latestError } = await supabase
+      .from("entity_mentions")
+      .select("mentioned_at")
+      .order("mentioned_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (latestError && latestError.code !== "PGRST116") {
+      console.error("[compute-heat-scores] Failed to fetch latest mention timestamp:", latestError.message);
+    }
+
+    const now = latestRow ? new Date(latestRow.mentioned_at) : new Date();
     const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
 
