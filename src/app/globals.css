@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import "../../node_modules/tailwindcss/index.css";
 
 @theme inline {
   --color-primary: #00d4ff;
@@ -28,3 +28,9 @@ body {
 input[type=range] { -webkit-appearance: none; background: transparent; }
 input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; background: #30363d; border-radius: 2px; }
 input[type=range]::-webkit-slider-thumb { height: 14px; width: 14px; border-radius: 50%; background: #f59e0b; cursor: pointer; -webkit-appearance: none; margin-top: -5px; }
+
+/* Chat slide-up animation */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}

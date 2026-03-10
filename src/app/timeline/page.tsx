@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import NavHeader from "@/components/NavHeader";
 import PriceChart from "@/components/PriceChart";
 import TimelineCard from "@/components/TimelineCard";
+import TopicPicker from "@/components/TopicPicker";
 import type { Article, Sentiment } from "@/lib/types";
 
 function TimelineContent() {
@@ -14,6 +15,7 @@ function TimelineContent() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [sentimentFilter, setSentimentFilter] = useState<Sentiment | "All">("All");
+  const [minMagnitude, setMinMagnitude] = useState<number>(0);
   const [topicDisplay, setTopicDisplay] = useState(topic);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
 
@@ -24,6 +26,9 @@ function TimelineContent() {
       const params = new URLSearchParams({ primary_topic_key: topic });
       if (sentimentFilter !== "All") {
         params.set("sentiment", sentimentFilter);
+      }
+      if (minMagnitude > 0) {
+        params.set("min_magnitude", String(minMagnitude));
       }
       const res = await fetch(`/api/articles/timeline?${params}`);
       const data = await res.json();
@@ -38,7 +43,7 @@ function TimelineContent() {
     } finally {
       setLoading(false);
     }
-  }, [topic, sentimentFilter]);
+  }, [topic, sentimentFilter, minMagnitude]);
 
   useEffect(() => {
     fetchArticles();
@@ -46,11 +51,15 @@ function TimelineContent() {
 
   const sentimentOptions: (Sentiment | "All")[] = ["All", "Bullish", "Bearish", "Neutral"];
 
+  const router = useRouter();
+
   if (!topic) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <p className="text-slate-500">Select a topic from the Dashboard to view its timeline.</p>
-      </div>
+      <TopicPicker
+        title="Explore Topic Timelines"
+        subtitle="Choose a topic to see its news timeline and price chart."
+        onSelect={(t) => router.push(`/timeline?topic=${encodeURIComponent(t)}`)}
+      />
     );
   }
 
@@ -77,7 +86,6 @@ function TimelineContent() {
             sentiment: a.sentiment,
           }))}
           onBubbleClick={(id) => setHighlightedId(id)}
-          onBubbleHover={(id) => setHighlightedId(id)}
           hoveredArticleId={highlightedId}
         />
       </div>
@@ -93,20 +101,41 @@ function TimelineContent() {
               {articles.length} events
             </span>
           </div>
-          <div className="flex bg-slate-900/50 p-1 rounded-lg border border-slate-800">
-            {sentimentOptions.map((s) => (
-              <button
-                key={s}
-                onClick={() => setSentimentFilter(s)}
-                className={
-                  sentimentFilter === s
-                    ? "px-3 py-1 text-[10px] font-bold bg-slate-800 text-white rounded"
-                    : "px-3 py-1 text-[10px] font-bold text-slate-500"
-                }
-              >
-                {s}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <div className="flex bg-slate-900/50 p-1 rounded-lg border border-slate-800">
+              {sentimentOptions.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setSentimentFilter(s)}
+                  className={
+                    sentimentFilter === s
+                      ? "px-3 py-1 text-[10px] font-bold bg-slate-800 text-white rounded"
+                      : "px-3 py-1 text-[10px] font-bold text-slate-500"
+                  }
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+            <div className="flex bg-slate-900/50 p-1 rounded-lg border border-slate-800">
+              {([
+                { label: "Any", value: 0 },
+                { label: "High 7+", value: 7 },
+                { label: "Critical 9+", value: 9 },
+              ] as const).map((preset) => (
+                <button
+                  key={preset.value}
+                  onClick={() => setMinMagnitude(preset.value)}
+                  className={
+                    minMagnitude === preset.value
+                      ? "px-3 py-1 text-[10px] font-bold bg-amber-500/20 text-amber-400 rounded"
+                      : "px-3 py-1 text-[10px] font-bold text-slate-500"
+                  }
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

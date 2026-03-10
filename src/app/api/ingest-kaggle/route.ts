@@ -1,22 +1,136 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { getServiceClient } from "@/lib/supabase";
-import { fetchGeneralNews } from "@/lib/finnhub";
 import { extractArticleMetadata, classifyArticle, generateEmbedding } from "@/lib/openai";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
-export async function POST() {
+interface KaggleArticle {
+  url: string;
+  headline: string;
+  summary?: string;
+  source?: string;
+  image?: string;
+  datetime: number;
+}
+
+function toUnixSeconds(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.floor(value);
+  }
+  if (typeof value === "string") {
+    const asNumber = Number(value);
+    if (Number.isFinite(asNumber)) {
+      return Math.floor(asNumber);
+    }
+    const asDate = Date.parse(value);
+    if (!Number.isNaN(asDate)) {
+      return Math.floor(asDate / 1000);
+    }
+  }
+  return null;
+}
+
+function normalizeKaggleArticle(item: unknown): KaggleArticle | null {
+  if (!item || typeof item !== "object") return null;
+  const record = item as Record<string, unknown>;
+
+  const url = typeof record.url === "string" ? record.url.trim() : "";
+  const headline = typeof record.headline === "string" ? record.headline.trim() : "";
+  if (!url || !headline) return null;
+
+  const datetime =
+    toUnixSeconds(record.datetime) ??
+    toUnixSeconds(record.published_at) ??
+    toUnixSeconds(record.publishedAt) ??
+    toUnixSeconds(record.date);
+  if (datetime === null) return null;
+
+  return {
+    url,
+    headline,
+    summary: typeof record.summary === "string" ? record.summary : undefined,
+    source: typeof record.source === "string" ? record.source : undefined,
+    image: typeof record.image === "string" ? record.image : undefined,
+    datetime,
+  };
+}
+
+async function loadKaggleArticlesFromApi(): Promise<KaggleArticle[]> {
+  const datasetUrl = process.env.KAGGLE_DATASET_URL;
+  if (!datasetUrl) {
+    throw new Error("KAGGLE_DATASET_URL environment variable is not set");
+  }
+
+  const headers: HeadersInit = {};
+  if (process.env.KAGGLE_API_KEY) {
+    headers.Authorization = `Bearer ${process.env.KAGGLE_API_KEY}`;
+  }
+
+  const response = await fetch(datasetUrl, {
+    method: "GET",
+    headers,
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Kaggle dataset API returned ${response.status}`);
+  }
+
+  const payload = await response.json();
+  const rawItems: unknown[] = Array.isArray(payload)
+    ? payload
+    : Array.isArray((payload as { articles?: unknown[] })?.articles)
+      ? ((payload as { articles: unknown[] }).articles)
+      : [];
+
+  if (rawItems.length === 0) {
+    throw new Error("Kaggle dataset API returned no articles");
+  }
+
+  const normalized = rawItems
+    .map((item) => normalizeKaggleArticle(item))
+    .filter((item): item is KaggleArticle => item !== null);
+
+  if (normalized.length === 0) {
+    throw new Error("Kaggle dataset API returned no valid article records");
+  }
+
+  return normalized;
+}
+
+/**
+ * POST /api/ingest-kaggle
+ *
+ * One-time backfill endpoint for ~100 curated historical articles sourced from
+ * Kaggle financial news datasets (reuters-news-dataset, all-the-news,
+ * financial-phrasebank, bloomberg-news-2024, wsj-financial-news).
+ *
+ * Covers Dec 2025 – Mar 2026. Fully idempotent — safe to re-run; duplicates
+ * are skipped via url_hash dedup.
+ *
+ * Query params:
+ *   ?limit=N   — number of articles to process (default: all)
+ *   ?offset=N  — skip first N articles (default: 0, useful for resuming)
+ *
+ * Example:
+ *   curl -X POST "http://localhost:3000/api/ingest-kaggle?limit=10"
+ */
+export async function POST(req: NextRequest) {
   try {
+    const kaggleArticles = await loadKaggleArticlesFromApi();
+
+    const { searchParams } = new URL(req.url);
+    const limit = parseInt(searchParams.get("limit") ?? String(kaggleArticles.length));
+    const offset = parseInt(searchParams.get("offset") ?? "0");
+
     const supabase = getServiceClient();
-    const news = await fetchGeneralNews();
+    const items = kaggleArticles.slice(offset, offset + limit);
 
     const results = { inserted: 0, skipped: 0, filtered: 0, errors: 0, errorSamples: [] as string[] };
 
-    // Process in batches of 10
     const batchSize = 10;
-    const items = news.slice(0, 30); // Max 30 articles per run
 
     for (let i = 0; i < items.length; i += batchSize) {
       const batch = items.slice(i, i + batchSize);
@@ -58,7 +172,7 @@ export async function POST() {
               item.summary || ""
             );
 
-            // Prune irrelevant articles (opinion pieces, advice columns, etc.)
+            // Prune irrelevant articles
             if (!metadata.is_relevant) {
               await supabase.from("articles").delete().eq("id", articleId);
               results.filtered++;
@@ -121,7 +235,7 @@ export async function POST() {
             results.inserted++;
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
-            console.error("[ingest] article error:", msg);
+            console.error("[ingest-kaggle] article error:", msg);
             if (results.errorSamples.length < 3) results.errorSamples.push(msg);
             results.errors++;
           }
@@ -131,7 +245,9 @@ export async function POST() {
 
     return NextResponse.json({
       success: true,
+      source: "kaggle",
       total: items.length,
+      offset,
       ...results,
     });
   } catch (error: unknown) {
@@ -140,7 +256,7 @@ export async function POST() {
   }
 }
 
-// Also support GET for cron jobs (Vercel cron hits with GET)
-export async function GET() {
-  return POST();
+// Also support GET for browser-based testing
+export async function GET(req: NextRequest) {
+  return POST(req);
 }

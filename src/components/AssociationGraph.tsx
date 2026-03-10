@@ -93,9 +93,9 @@ export default function AssociationGraph({ nodes, edges, onNodeClick, onResetGra
         "link",
         d3.forceLink(edges)
           .id((d: any) => d.id)
-          .distance(180)
+          .distance(300)
       )
-      .force("charge", d3.forceManyBody().strength(-800))
+      .force("charge", d3.forceManyBody().strength(-1500))
       .force("center", d3.forceCenter(cx, cy))
       .force("collision", d3.forceCollide().radius((d: any) => d.id === "focus" ? 80 : 60));
 
@@ -293,25 +293,47 @@ export default function AssociationGraph({ nodes, edges, onNodeClick, onResetGra
         {nodes.length - 1} CONNECTIONS · {edges.length} EDGES
         {maxLevel > 1 && ` · DEPTH ${maxLevel}`}
       </div>
-      {/* Level legend (shown when expanded beyond level 1) */}
-      {maxLevel > 1 && (
-        <div className="absolute top-4 left-4 font-mono text-[9px] text-slate-500 bg-[#0b0e14]/80 backdrop-blur px-3 py-2 rounded border border-[#30363d] space-y-1.5">
-          <div className="flex items-center gap-2">
-            <svg width="24" height="6"><line x1="0" y1="3" x2="24" y2="3" stroke="#64748b" strokeWidth="1.5" /></svg>
-            <span>Level 1</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <svg width="24" height="6"><line x1="0" y1="3" x2="24" y2="3" stroke="#64748b" strokeWidth="1.5" strokeDasharray="6,3" /></svg>
-            <span>Level 2</span>
-          </div>
-          {maxLevel >= 3 && (
+      {/* Legend — always visible */}
+      <div className="absolute top-4 left-4 font-mono text-[9px] text-slate-500 bg-[#0b0e14]/90 backdrop-blur px-3 py-2 rounded border border-[#30363d] space-y-1.5 pointer-events-none">
+        <div className="text-[8px] uppercase tracking-wider text-slate-600 mb-1">Legend</div>
+        {/* Node ring levels (only shown when depth > 1) */}
+        {maxLevel > 1 && (
+          <>
             <div className="flex items-center gap-2">
-              <svg width="24" height="6"><line x1="0" y1="3" x2="24" y2="3" stroke="#64748b" strokeWidth="1.5" strokeDasharray="3,3" /></svg>
-              <span>Level 3</span>
+              <svg width="24" height="6"><line x1="0" y1="3" x2="24" y2="3" stroke="#64748b" strokeWidth="1.5" /></svg>
+              <span>Level 1</span>
             </div>
-          )}
+            <div className="flex items-center gap-2">
+              <svg width="24" height="6"><line x1="0" y1="3" x2="24" y2="3" stroke="#64748b" strokeWidth="1.5" strokeDasharray="6,3" /></svg>
+              <span>Level 2</span>
+            </div>
+            {maxLevel >= 3 && (
+              <div className="flex items-center gap-2">
+                <svg width="24" height="6"><line x1="0" y1="3" x2="24" y2="3" stroke="#64748b" strokeWidth="1.5" strokeDasharray="3,3" /></svg>
+                <span>Level 3</span>
+              </div>
+            )}
+            <div className="border-t border-[#1f2731] my-1" />
+          </>
+        )}
+        {/* Edge sentiment */}
+        <div className="flex items-center gap-2">
+          <div className="h-[2px] w-6 rounded" style={{ background: "rgba(16,185,129,0.6)" }} />
+          <span>Aligned sentiment</span>
         </div>
-      )}
+        <div className="flex items-center gap-2">
+          <div className="h-[2px] w-6 rounded" style={{ background: "rgba(244,63,94,0.6)" }} />
+          <span>Opposing sentiment</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="h-[2px] w-6 rounded" style={{ background: "rgba(148,163,184,0.4)" }} />
+          <span>Neutral</span>
+        </div>
+        <div className="border-t border-[#1f2731] my-1" />
+        {/* Node size encoding */}
+        <div className="text-slate-600">Node size = impact magnitude</div>
+        <div className="text-slate-600">Edge width = link score</div>
+      </div>
       {/* Reset graph button (collapse to level 1) — only shown when expanded */}
       {maxLevel > 1 && onResetGraph && (
         <button

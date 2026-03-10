@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef } from "react";
 import type { Article } from "@/lib/types";
 import SentimentBadge from "./SentimentBadge";
 
@@ -12,7 +11,6 @@ interface TimelineCardProps {
 }
 
 export default function TimelineCard({ article, isHighlighted, onHover }: TimelineCardProps) {
-  const cardRef = useRef<HTMLDivElement>(null);
   const date = new Date(article.published_at);
   const month = date.toLocaleString("en-US", { month: "short" }).toUpperCase();
   const day = date.getDate().toString().padStart(2, "0");
@@ -31,16 +29,8 @@ export default function TimelineCard({ article, isHighlighted, onHover }: Timeli
     ...(article.entities_policies || []),
   ].slice(0, 4);
 
-  // Scroll into view when highlighted from graph click
-  useEffect(() => {
-    if (isHighlighted && cardRef.current) {
-      cardRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-  }, [isHighlighted]);
-
   return (
     <div
-      ref={cardRef}
       className="relative"
       data-article-id={article.id}
       onMouseEnter={() => onHover?.(article.id)}

@@ -16,10 +16,10 @@ import type {
   TimeWindow,
 } from "@/lib/types";
 
-const MODE_OPTIONS: AssociationMode[] = ["broad", "balanced", "strict", "investigative"];
+const MODE_OPTIONS: AssociationMode[] = ["broad", "strict"];
 const TIME_WINDOWS: TimeWindow[] = ["7D", "1M", "3M", "6M"];
 const SENTIMENT_OPTIONS: (Sentiment | "All")[] = ["All", "Bullish", "Bearish", "Neutral"];
-const ENTITY_TYPES: EntityType[] = ["companies", "people", "policies", "markets"];
+const ENTITY_TYPES: EntityType[] = ["companies", "people", "policies", "markets", "topics"];
 
 function formatDate(date: string): string {
   return new Date(date).toLocaleDateString("en-US", {
@@ -38,7 +38,7 @@ function AssociationsContent() {
   const articleId = searchParams.get("article") || "";
 
   const [timeWindow, setTimeWindow] = useState<TimeWindow>("1M");
-  const [mode, setMode] = useState<AssociationMode>("balanced");
+  const [mode, setMode] = useState<AssociationMode>("broad");
   const [view, setView] = useState<AssociationsView>("evidence");
   const [depth, setDepth] = useState(2);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -50,6 +50,7 @@ function AssociationsContent() {
     people: true,
     policies: true,
     markets: true,
+    topics: true,
   });
 
   const [data, setData] = useState<AssociationsResponseV2 | null>(null);
@@ -106,10 +107,28 @@ function AssociationsContent() {
 
   if (!articleId) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <p className="text-slate-500">
-          Select &quot;Associations →&quot; on a news card to investigate linked events.
-        </p>
+      <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
+        <div className="max-w-md space-y-4">
+          <div className="text-5xl font-black text-slate-800 tracking-tight select-none">⬡</div>
+          <h1 className="text-xl font-bold text-white">No focus article selected</h1>
+          <p className="text-sm text-slate-400 leading-relaxed">
+            The Associations view requires a specific article to investigate. It is not a standalone destination —
+            you reach it by selecting an article from the Dashboard or Timeline.
+          </p>
+          <div className="text-xs text-slate-500 border border-[#1f2731] rounded-lg p-4 text-left space-y-1.5 bg-[#0b0e14]">
+            <div className="text-slate-300 font-semibold mb-2">How to get here:</div>
+            <div className="flex gap-2"><span className="text-cyan-400 font-mono">1.</span><span>Go to the Dashboard</span></div>
+            <div className="flex gap-2"><span className="text-cyan-400 font-mono">2.</span><span>Find a relevant article in the news feed</span></div>
+            <div className="flex gap-2"><span className="text-cyan-400 font-mono">3.</span><span>Click the <span className="text-amber-300 font-semibold">Associations</span> link on the article card</span></div>
+            <div className="flex gap-2"><span className="text-cyan-400 font-mono">4.</span><span>This page loads with that article as the focus</span></div>
+          </div>
+          <a
+            href="/"
+            className="inline-block mt-2 px-4 py-2 text-sm font-semibold rounded border border-[#30363d] text-slate-300 hover:text-white hover:border-slate-500 transition-colors"
+          >
+            ← Go to Dashboard
+          </a>
+        </div>
       </div>
     );
   }
@@ -122,10 +141,17 @@ function AssociationsContent() {
           <section className="bg-[#0b0e14] border border-[#30363d] rounded-xl p-4">
             <div className="flex flex-wrap items-center gap-3 justify-between">
               <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className="text-[10px] text-slate-600 mr-1"
+                  title="How far before/after the focus article's publication date to look for related events"
+                >
+                  TIME WINDOW
+                </span>
                 {TIME_WINDOWS.map((tw) => (
                   <button
                     key={tw}
                     onClick={() => setTimeWindow(tw)}
+                    title={`Look for events published within ${tw === "7D" ? "7 days" : tw === "1M" ? "1 month" : tw === "3M" ? "3 months" : "6 months"} of the focus article's publication date`}
                     className={
                       timeWindow === tw
                         ? "px-3 py-1.5 text-[11px] font-semibold rounded border border-cyan-500/40 bg-cyan-500/10 text-cyan-300"
@@ -141,6 +167,11 @@ function AssociationsContent() {
                   <button
                     key={option}
                     onClick={() => setMode(option)}
+                    title={
+                      option === "broad"
+                        ? "Broad: low threshold (0.30), up to 8 results — casts a wide net for loosely related events"
+                        : "Strict: high threshold (0.65), up to 5 results — only closely matching events"
+                    }
                     className={
                       mode === option
                         ? "px-3 py-1.5 text-[11px] font-semibold rounded border border-amber-500/40 bg-amber-500/10 text-amber-300"
@@ -154,6 +185,7 @@ function AssociationsContent() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setView("evidence")}
+                  title="Evidence view: ranked list of related articles with link scores and trace path chains"
                   className={
                     view === "evidence"
                       ? "px-3 py-1.5 text-[11px] font-semibold rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
@@ -164,6 +196,7 @@ function AssociationsContent() {
                 </button>
                 <button
                   onClick={() => setView("graph")}
+                  title="Graph view: interactive force-directed network — click nodes to inspect link score breakdown"
                   className={
                     view === "graph"
                       ? "px-3 py-1.5 text-[11px] font-semibold rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
@@ -203,7 +236,8 @@ function AssociationsContent() {
                 </div>
 
                 <div>
-                  <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">Entity Types</div>
+                  <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Entity Types</div>
+                  <div className="text-[10px] text-slate-600 mb-2 italic">Disabling an entity type removes it from scoring, not just display.</div>
                   <div className="flex gap-2 flex-wrap">
                     {ENTITY_TYPES.map((entityType) => (
                       <button
@@ -214,6 +248,7 @@ function AssociationsContent() {
                             [entityType]: !prev[entityType],
                           }))
                         }
+                        title={`${entityFilters[entityType] ? "Disable" : "Enable"} ${entityType} — affects entity overlap scoring`}
                         className={
                           entityFilters[entityType]
                             ? "px-2 py-1 text-[11px] rounded border border-amber-500/40 bg-amber-500/10 text-amber-300 capitalize"
@@ -228,8 +263,10 @@ function AssociationsContent() {
 
                 <div>
                   <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-slate-500 mb-2">
-                    <span>Manual Threshold</span>
-                    <span>{threshold === null ? "Preset" : threshold.toFixed(2)}</span>
+                    <span title="Minimum link score (0–1) required for an event to appear as related. Higher = fewer, more closely-matched results.">
+                      Link Threshold
+                    </span>
+                    <span className="text-amber-300">{threshold === null ? "Mode default" : threshold.toFixed(2)}</span>
                   </div>
                   <input
                     type="range"
@@ -240,19 +277,38 @@ function AssociationsContent() {
                     onChange={(e) => setThreshold(Number.parseFloat(e.target.value))}
                     className="w-full"
                   />
-                  <div className="mt-2 flex gap-2">
+                  <div className="flex justify-between text-[9px] text-slate-600 mt-1 mb-2">
+                    <span>0.30 (Broad)</span>
+                    <span>0.95 (Strict)</span>
+                  </div>
+                  <div className="mt-1 flex gap-2 items-center">
                     <button
                       onClick={() => setThreshold(null)}
-                      className="px-2 py-1 text-[10px] rounded border border-[#30363d] text-slate-400"
+                      title="Reset to the threshold defined by the selected mode (Broad / Strict)"
+                      className="px-2 py-1 text-[10px] rounded border border-[#30363d] text-slate-400 hover:text-white"
                     >
                       Use Mode Default
                     </button>
-                    <button
-                      onClick={() => setDepth((prev) => (prev % 3) + 1)}
-                      className="px-2 py-1 text-[10px] rounded border border-[#30363d] text-slate-300"
-                    >
-                      Trace Depth: {depth}
-                    </button>
+                    <div className="flex items-center gap-1 border border-[#30363d] rounded px-2 py-1">
+                      <span className="text-[10px] text-slate-500" title="How many hops away from the focus article to include in trace chains. Depth 1 = direct connections only; depth 2–3 shows multi-hop chains.">
+                        TRACE DEPTH
+                      </span>
+                      <button
+                        onClick={() => setDepth((prev) => Math.max(1, prev - 1))}
+                        className="text-slate-400 hover:text-white text-[12px] font-bold px-1 leading-none"
+                        title="Decrease trace depth"
+                      >
+                        −
+                      </button>
+                      <span className="text-[11px] text-amber-300 font-semibold w-4 text-center">{depth}</span>
+                      <button
+                        onClick={() => setDepth((prev) => Math.min(3, prev + 1))}
+                        className="text-slate-400 hover:text-white text-[12px] font-bold px-1 leading-none"
+                        title="Increase trace depth"
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -272,11 +328,32 @@ function AssociationsContent() {
               <div className="bg-[#0b0e14] border border-[#30363d] rounded-xl p-4 min-h-[560px]">
                 {view === "graph" ? (
                   <div className="relative h-[560px] rounded-lg overflow-hidden border border-[#1f2731]">
-                    <AssociationGraph
-                      nodes={data.nodes || []}
-                      edges={data.edges || []}
-                      onNodeClick={setSelectedGraphNode}
-                    />
+                    {(data.nodes || []).length <= 1 ? (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-center px-6">
+                        {data.focus && (
+                          <div className="border border-[#1f2731] rounded-lg p-4 bg-[#0e1219] max-w-md w-full text-left">
+                            <div className="text-[10px] text-slate-500 mb-1">
+                              {data.focus.source || "Unknown source"} • {formatDate(data.focus.published_at)}
+                            </div>
+                            <h3 className="text-sm font-semibold text-white leading-snug">{data.focus.headline}</h3>
+                            <div className="mt-2 flex items-center gap-2">
+                              <SentimentBadge sentiment={data.focus.sentiment} />
+                              <span className="text-[11px] text-slate-400">Magnitude: <span className="text-amber-300">{data.focus.magnitude}</span><span className="text-[9px] text-slate-600"> / 10</span></span>
+                            </div>
+                          </div>
+                        )}
+                        <span className="text-slate-500 text-sm">No other articles are close enough to be linked.</span>
+                        <span className="text-[11px] text-slate-600">
+                          Try lowering the Link Threshold or expanding the Time Window.
+                        </span>
+                      </div>
+                    ) : (
+                      <AssociationGraph
+                        nodes={data.nodes || []}
+                        edges={data.edges || []}
+                        onNodeClick={setSelectedGraphNode}
+                      />
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -287,8 +364,27 @@ function AssociationsContent() {
                       </span>
                     </div>
                     {data.related_events.length === 0 ? (
-                      <div className="h-56 border border-[#1f2731] rounded-lg flex items-center justify-center text-slate-500 text-sm">
-                        No linked events for these parameters.
+                      <div className="space-y-4">
+                        {data.focus && (
+                          <div className="border-l-2 border-amber-500/60 border border-[#1f2731] rounded-lg p-4 bg-[#0e1219]">
+                            <div className="text-[10px] uppercase tracking-wider text-amber-400/70 font-semibold mb-2">Focus Article</div>
+                            <h3 className="text-sm font-semibold text-white leading-snug">{data.focus.headline}</h3>
+                            {data.focus.summary && (
+                              <p className="text-[12px] text-slate-300 leading-relaxed mt-1.5">{data.focus.summary}</p>
+                            )}
+                            <div className="text-[10px] text-slate-500 mt-2">
+                              {data.focus.source || "Unknown source"} • {formatDate(data.focus.published_at)}
+                            </div>
+                            <div className="mt-2 flex items-center gap-2">
+                              <SentimentBadge sentiment={data.focus.sentiment} />
+                              <span className="text-[11px] text-slate-400">Magnitude: <span className="text-amber-300">{data.focus.magnitude}</span><span className="text-[9px] text-slate-600"> / 10</span></span>
+                            </div>
+                          </div>
+                        )}
+                        <div className="border border-[#1f2731] rounded-lg p-4 flex flex-col items-center justify-center gap-1 text-center">
+                          <span className="text-slate-500 text-sm">No other articles are close enough to be linked.</span>
+                          <span className="text-[11px] text-slate-600">Try lowering the Link Threshold or expanding the Time Window.</span>
+                        </div>
                       </div>
                     ) : (
                       data.related_events.map((event, index) => (
@@ -304,7 +400,13 @@ function AssociationsContent() {
                               <h3 className="text-sm font-semibold text-white leading-snug">{event.headline}</h3>
                             </div>
                             <div className="text-right shrink-0">
-                              <div className="text-xs font-semibold text-amber-300">{event.link_score.toFixed(2)}</div>
+                              <div
+                                className="text-xs font-semibold text-amber-300"
+                                title="Link Score (0–1): composite similarity score. Formula: 0.30 × semantic + 0.25 × entity overlap + 0.25 × magnitude proximity + 0.20 × sentiment alignment"
+                              >
+                                {event.link_score.toFixed(2)}
+                                <span className="text-[9px] text-slate-600 font-normal ml-0.5">/ 1.0</span>
+                              </div>
                               <SentimentBadge sentiment={event.sentiment} />
                             </div>
                           </div>
@@ -320,9 +422,10 @@ function AssociationsContent() {
                           </div>
                           <button
                             onClick={() => setActiveTraceRoot(event.article_id)}
-                            className="mt-3 text-[11px] text-cyan-300 hover:text-cyan-200"
+                            className={`mt-3 text-[11px] hover:underline ${activeTraceRoot === event.article_id ? "text-cyan-200 font-semibold" : "text-cyan-400 hover:text-cyan-300"}`}
+                            title="Load the chain of prior events that contributed to this article's relevance (requires Trace Depth ≥ 2)"
                           >
-                            View trace contributors
+                            {activeTraceRoot === event.article_id ? "▶ Trace loaded →" : "View trace contributors →"}
                           </button>
                         </div>
                       ))
@@ -345,17 +448,26 @@ function AssociationsContent() {
                           <p className="text-[12px] text-slate-300 leading-relaxed">{selectedGraphNode.summary}</p>
                         )}
                         <div className="grid grid-cols-2 gap-2 text-[11px]">
-                          <div className="border border-[#1f2731] rounded p-2 text-slate-300">
+                          <div
+                            className="border border-[#1f2731] rounded p-2 text-slate-300"
+                            title="Link Score (0–1): composite similarity. Formula: 0.30 × semantic + 0.25 × entity overlap + 0.25 × magnitude proximity + 0.20 × sentiment alignment"
+                          >
                             Link Score: <span className="text-amber-300">{selectedGraphNode.linkScore.toFixed(2)}</span>
+                            <span className="text-[9px] text-slate-600"> / 1.0</span>
                           </div>
-                          <div className="border border-[#1f2731] rounded p-2 text-slate-300">
+                          <div
+                            className="border border-[#1f2731] rounded p-2 text-slate-300"
+                            title="Magnitude (0–10): LLM-assigned market impact score. Also determines node size in the graph."
+                          >
                             Magnitude: <span className="text-amber-300">{selectedGraphNode.magnitude}</span>
+                            <span className="text-[9px] text-slate-600"> / 10</span>
                           </div>
                         </div>
                       </div>
                     ) : (
-                      <div className="h-56 border border-[#1f2731] rounded-lg flex items-center justify-center text-slate-500 text-sm">
-                        Select a node to inspect its evidence context.
+                      <div className="h-56 border border-[#1f2731] rounded-lg flex flex-col items-center justify-center gap-2 text-slate-500 text-sm px-4 text-center">
+                        <span>Click any node in the graph to inspect it.</span>
+                        <span className="text-[11px] text-slate-600">You will see headline, link score breakdown, magnitude, and sentiment.</span>
                       </div>
                     )}
                   </div>
@@ -366,8 +478,15 @@ function AssociationsContent() {
                       Chain of prior events used to explain the selected linked event.
                     </p>
                     {!activeTrace ? (
-                      <div className="h-56 border border-[#1f2731] rounded-lg flex items-center justify-center text-slate-500 text-sm">
-                        Select a linked event to load a trace path.
+                      <div className="h-56 border border-[#1f2731] rounded-lg flex flex-col items-center justify-center gap-2 text-slate-500 text-sm px-4 text-center">
+                        <span>Click <span className="text-cyan-400">View trace contributors →</span> on a linked event to load its trace chain here.</span>
+                      </div>
+                    ) : activeTrace.nodes.length === 0 ? (
+                      <div className="h-56 border border-[#1f2731] rounded-lg flex flex-col items-center justify-center gap-2 text-slate-500 text-sm px-4 text-center">
+                        <span>No trace contributors found for this event.</span>
+                        <span className="text-[11px] text-slate-600">
+                          Try increasing <strong className="text-slate-400">Trace Depth</strong> to 2 or 3 in Advanced settings.
+                        </span>
                       </div>
                     ) : (
                       <div className="space-y-3">

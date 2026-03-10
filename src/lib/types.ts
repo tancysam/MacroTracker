@@ -1,3 +1,8 @@
+export interface MarketImpact {
+  asset: string;
+  direction: "up" | "down" | "mixed";
+}
+
 export interface Article {
   id: string;
   url: string;
@@ -18,6 +23,8 @@ export interface Article {
   entities_companies: string[];
   entities_policies: string[];
   embedding?: number[];
+  market_impacts: MarketImpact[] | null;
+  taxonomy_tags: string[];
 }
 
 export interface HeatScoreEntry {
@@ -30,7 +37,7 @@ export interface HeatScoreEntry {
 export interface AssociationNode {
   id: string;
   label: string;
-  type: "focus" | "companies" | "people" | "policies" | "markets";
+  type: "focus" | "companies" | "people" | "policies" | "markets" | "topics";
   magnitude: number;
   sentiment: number;
   linkScore: number;
@@ -43,6 +50,7 @@ export interface AssociationNode {
     people: string[];
     policies: string[];
     markets: string[];
+    topics: string[];
   };
   breakdown: {
     semantic: number;
@@ -69,7 +77,7 @@ export interface AssociationEdge {
   sharedEntities?: string[];
 }
 
-export type AssociationMode = "broad" | "balanced" | "strict" | "investigative";
+export type AssociationMode = "broad" | "strict";
 export type AssociationsView = "evidence" | "graph";
 
 export interface AssociationEvidence {
@@ -147,7 +155,7 @@ export interface MarketCandle {
 }
 
 export type Sentiment = "Bullish" | "Bearish" | "Neutral";
-export type SortMode = "heatscore" | "recency" | "composite";
+export type SortMode = "recency" | "magnitude";
 export type TimeWindow = "7D" | "1M" | "3M" | "6M";
 export type TimeRange = "1M" | "3M" | "6M" | "1Y" | "ALL";
-export type EntityType = "companies" | "people" | "policies" | "markets";
+export type EntityType = "companies" | "people" | "policies" | "markets" | "topics";
