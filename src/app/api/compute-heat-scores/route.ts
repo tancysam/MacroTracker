@@ -8,44 +8,38 @@ export async function POST() {
   try {
     const supabase = getServiceClient();
 
-    const { data: latestRow, error: latestError } = await supabase
-      .from("entity_mentions")
-      .select("mentioned_at")
-      .order("mentioned_at", { ascending: false })
-      .limit(1)
-      .single();
-
-    if (latestError && latestError.code !== "PGRST116") {
-      console.error("[compute-heat-scores] Failed to fetch latest mention timestamp:", latestError.message);
-    }
-
-    const now = latestRow ? new Date(latestRow.mentioned_at) : new Date();
+    const now = new Date();
     const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
 
-    // Get mentions this week
+    // Get mentions this week (with timestamps for recency weighting)
     const { data: thisWeek } = await supabase
       .from("entity_mentions")
-      .select("entity_name, entity_type")
+      .select("entity_name, entity_type, mentioned_at")
       .gte("mentioned_at", oneWeekAgo.toISOString());
 
-    // Get mentions last week
+    // Get mentions last week (flat count — baseline only)
     const { data: lastWeek } = await supabase
       .from("entity_mentions")
       .select("entity_name, entity_type")
       .gte("mentioned_at", twoWeeksAgo.toISOString())
       .lt("mentioned_at", oneWeekAgo.toISOString());
 
-    // Count mentions per entity
-    const thisWeekCounts = new Map<string, { count: number; type: string }>();
+    // Recency-weighted count for this week
+    // Daily decay of 0.85: today=1.0, 1d ago=0.85, 2d=0.72, 3d=0.61, 7d=0.32
+    const DAILY_DECAY = 0.85;
+    const MS_PER_DAY = 24 * 60 * 60 * 1000;
+    const thisWeekCounts = new Map<string, { weighted: number; type: string }>();
     const lastWeekCounts = new Map<string, number>();
 
     for (const m of thisWeek || []) {
+      const daysAgo = (now.getTime() - new Date(m.mentioned_at).getTime()) / MS_PER_DAY;
+      const weight = Math.pow(DAILY_DECAY, daysAgo);
       const existing = thisWeekCounts.get(m.entity_name);
       if (existing) {
-        existing.count++;
+        existing.weighted += weight;
       } else {
-        thisWeekCounts.set(m.entity_name, { count: 1, type: m.entity_type });
+        thisWeekCounts.set(m.entity_name, { weighted: weight, type: m.entity_type });
       }
     }
 
@@ -59,13 +53,7 @@ export async function POST() {
     for (const [name, data] of thisWeekCounts) {
       if (TRENDING_BLOCKLIST.has(name)) continue;
       const lastCount = lastWeekCounts.get(name) || 0;
-      let heatScore: number;
-
-      if (lastCount === 0) {
-        heatScore = Math.min(data.count * 10, 999);
-      } else {
-        heatScore = ((data.count - lastCount) / lastCount) * 100;
-      }
+      const heatScore = (data.weighted - lastCount) * Math.log(1 + data.weighted);
 
       scores.push({
         entity_name: name,

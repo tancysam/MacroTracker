@@ -16,7 +16,7 @@ export default function TrendingPanel() {
       .finally(() => setLoading(false));
   }, []);
 
-  const maxScore = entries.length > 0 ? Math.max(...entries.map((e) => e.heat_score)) : 1;
+  const maxScore = Math.max(...entries.map((e) => e.heat_score), 1);
 
   return (
     <aside className="w-80 border-l border-[#1e2530] bg-[#080b12] flex flex-col shrink-0 p-5 overflow-y-auto">
@@ -26,7 +26,7 @@ export default function TrendingPanel() {
           Trending &amp; Top Entities
         </h3>
         <p className="text-[10px] text-slate-500 mb-4">
-          Ranked by HeatScore — news mention frequency vs. last week
+          Ranked by HeatScore — mention growth weighted by volume
         </p>
 
         {loading ? (
@@ -56,10 +56,10 @@ export default function TrendingPanel() {
                     HS: {Math.round(entry.heat_score)}
                   </span>
                 </div>
-                <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mt-1 ml-6">
+                <div className="w-[calc(100%-1.5rem)] bg-slate-800 h-1.5 rounded-full overflow-hidden mt-1 ml-6">
                   <div
                     className="bg-[#00d4ff] h-full rounded-full transition-all"
-                    style={{ width: `${Math.min((entry.heat_score / maxScore) * 100, 100)}%` }}
+                    style={{ width: `${Math.min(Math.max((entry.heat_score / maxScore) * 100, 0), 100)}%` }}
                   />
                 </div>
               </Link>
