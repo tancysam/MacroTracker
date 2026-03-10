@@ -26,7 +26,7 @@ export default function TrendingPanel() {
           Trending &amp; Top Entities
         </h3>
         <p className="text-[10px] text-slate-500 mb-4">
-          Ranked by HeatScore — news mention frequency vs. last week
+          Ranked by HeatScore — mention growth weighted by volume
         </p>
 
         {loading ? (

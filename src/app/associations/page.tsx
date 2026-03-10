@@ -286,7 +286,7 @@ function AssociationsContent() {
                   <div className="mt-1 flex gap-2 items-center">
                     <button
                       onClick={() => setThreshold(null)}
-                      title="Reset to the threshold defined by the selected mode (Broad / Strict)"
+                      title="Reset to the threshold defined by the selected mode (Broad / Balanced / Strict)"
                       className="px-2 py-1 text-[10px] rounded border border-[#30363d] text-slate-400 hover:text-white"
                     >
                       Use Mode Default
