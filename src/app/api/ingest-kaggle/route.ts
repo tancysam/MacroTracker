@@ -2,10 +2,103 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { getServiceClient } from "@/lib/supabase";
 import { extractArticleMetadata, classifyArticle, generateEmbedding } from "@/lib/openai";
-import kaggleArticles from "@/data/kaggle-articles.json";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
+
+interface KaggleArticle {
+  url: string;
+  headline: string;
+  summary?: string;
+  source?: string;
+  image?: string;
+  datetime: number;
+}
+
+function toUnixSeconds(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.floor(value);
+  }
+  if (typeof value === "string") {
+    const asNumber = Number(value);
+    if (Number.isFinite(asNumber)) {
+      return Math.floor(asNumber);
+    }
+    const asDate = Date.parse(value);
+    if (!Number.isNaN(asDate)) {
+      return Math.floor(asDate / 1000);
+    }
+  }
+  return null;
+}
+
+function normalizeKaggleArticle(item: unknown): KaggleArticle | null {
+  if (!item || typeof item !== "object") return null;
+  const record = item as Record<string, unknown>;
+
+  const url = typeof record.url === "string" ? record.url.trim() : "";
+  const headline = typeof record.headline === "string" ? record.headline.trim() : "";
+  if (!url || !headline) return null;
+
+  const datetime =
+    toUnixSeconds(record.datetime) ??
+    toUnixSeconds(record.published_at) ??
+    toUnixSeconds(record.publishedAt) ??
+    toUnixSeconds(record.date);
+  if (datetime === null) return null;
+
+  return {
+    url,
+    headline,
+    summary: typeof record.summary === "string" ? record.summary : undefined,
+    source: typeof record.source === "string" ? record.source : undefined,
+    image: typeof record.image === "string" ? record.image : undefined,
+    datetime,
+  };
+}
+
+async function loadKaggleArticlesFromApi(): Promise<KaggleArticle[]> {
+  const datasetUrl = process.env.KAGGLE_DATASET_URL;
+  if (!datasetUrl) {
+    throw new Error("KAGGLE_DATASET_URL environment variable is not set");
+  }
+
+  const headers: HeadersInit = {};
+  if (process.env.KAGGLE_API_KEY) {
+    headers.Authorization = `Bearer ${process.env.KAGGLE_API_KEY}`;
+  }
+
+  const response = await fetch(datasetUrl, {
+    method: "GET",
+    headers,
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Kaggle dataset API returned ${response.status}`);
+  }
+
+  const payload = await response.json();
+  const rawItems: unknown[] = Array.isArray(payload)
+    ? payload
+    : Array.isArray((payload as { articles?: unknown[] })?.articles)
+      ? ((payload as { articles: unknown[] }).articles)
+      : [];
+
+  if (rawItems.length === 0) {
+    throw new Error("Kaggle dataset API returned no articles");
+  }
+
+  const normalized = rawItems
+    .map((item) => normalizeKaggleArticle(item))
+    .filter((item): item is KaggleArticle => item !== null);
+
+  if (normalized.length === 0) {
+    throw new Error("Kaggle dataset API returned no valid article records");
+  }
+
+  return normalized;
+}
 
 /**
  * POST /api/ingest-kaggle
@@ -26,6 +119,8 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(req: NextRequest) {
   try {
+    const kaggleArticles = await loadKaggleArticlesFromApi();
+
     const { searchParams } = new URL(req.url);
     const limit = parseInt(searchParams.get("limit") ?? String(kaggleArticles.length));
     const offset = parseInt(searchParams.get("offset") ?? "0");
