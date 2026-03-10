@@ -16,7 +16,9 @@ export default function NavHeader() {
   const [showSearch, setShowSearch] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [user, setUser] = useState<User | null>(null);
 
@@ -67,6 +69,19 @@ export default function NavHeader() {
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, [showProfileMenu]);
 
+  // Close mobile menu when clicking outside
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target as Node)) {
+        setShowMobileMenu(false);
+      }
+    }
+    if (showMobileMenu) {
+      document.addEventListener("mousedown", onClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [showMobileMenu]);
+
   async function handleSignOut() {
     const supabase = createSupabaseBrowserClient();
     await supabase.auth.signOut();
@@ -82,13 +97,45 @@ export default function NavHeader() {
 
   return (
     <>
-      <header className="sticky top-0 z-50 relative flex items-center justify-between border-b border-[#1e2530] bg-[#080b12]/80 backdrop-blur-md px-6 py-3 lg:px-20 shrink-0">
-        <div className="flex items-center gap-8">
+      <header className="sticky top-0 z-50 flex items-center gap-4 border-b border-[#1e2530] bg-[#080b12]/80 backdrop-blur-md px-6 py-3 lg:px-20 shrink-0">
+        {/* Left: logo + nav */}
+        <div className="flex items-center gap-3 shrink-0 lg:flex-1 lg:gap-6">
+          {/* Hamburger — visible below lg */}
+          <div className="relative lg:hidden" ref={mobileMenuRef}>
+            <button
+              onClick={() => setShowMobileMenu((v) => !v)}
+              aria-label="Navigation menu"
+              aria-expanded={showMobileMenu}
+              className="flex items-center justify-center h-8 w-8 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            >
+              <span className="material-symbols-outlined text-xl">{showMobileMenu ? "close" : "menu"}</span>
+            </button>
+
+            {showMobileMenu && (
+              <div className="absolute left-0 top-full mt-2 w-44 bg-[#0d1117] border border-[#1e2530] rounded-xl shadow-2xl shadow-black/60 py-1 z-50">
+                {navLinks.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    onClick={() => setShowMobileMenu(false)}
+                    className={
+                      isActive(link.href)
+                        ? "flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-[#00d4ff] bg-[#111520]"
+                        : "flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-slate-300 hover:text-white hover:bg-[#111520] transition-colors"
+                    }
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
           <Link href="/" className="flex items-center gap-3 text-[#00d4ff]">
             <span className="material-symbols-outlined text-3xl font-bold">blur_on</span>
             <h2 className="text-white text-xl font-black tracking-tight">MacroTracker</h2>
           </Link>
-          <nav className="hidden md:flex items-center gap-6">
+          <nav className="hidden lg:flex items-center gap-6">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
@@ -105,7 +152,8 @@ export default function NavHeader() {
           </nav>
         </div>
 
-        <form onSubmit={handleSearch} className="absolute left-1/2 -translate-x-1/2 w-full max-w-2xl px-4">
+        {/* Center: search */}
+        <form onSubmit={handleSearch} className="flex-1 min-w-0 max-w-2xl lg:mx-auto px-2">
           <div className="flex w-full items-stretch rounded-lg bg-slate-800 h-10 px-3">
             <span className="material-symbols-outlined self-center text-slate-500">search</span>
             <input
@@ -119,7 +167,8 @@ export default function NavHeader() {
           </div>
         </form>
 
-        <div className="flex items-center gap-3 justify-end">
+        {/* Right: profile */}
+        <div className="flex items-center gap-3 shrink-0 lg:flex-1 lg:justify-end">
           {/* Avatar — click to open profile dropdown */}
           <div className="relative" ref={profileMenuRef}>
             <button
