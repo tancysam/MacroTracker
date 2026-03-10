@@ -77,7 +77,7 @@ export interface AssociationEdge {
   sharedEntities?: string[];
 }
 
-export type AssociationMode = "broad" | "strict";
+export type AssociationMode = "broad" | "balanced" | "strict";
 export type AssociationsView = "evidence" | "graph";
 
 export interface AssociationEvidence {

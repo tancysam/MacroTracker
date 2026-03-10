@@ -16,7 +16,7 @@ import type {
   TimeWindow,
 } from "@/lib/types";
 
-const MODE_OPTIONS: AssociationMode[] = ["broad", "strict"];
+const MODE_OPTIONS: AssociationMode[] = ["broad", "balanced", "strict"];
 const TIME_WINDOWS: TimeWindow[] = ["7D", "1M", "3M", "6M"];
 const SENTIMENT_OPTIONS: (Sentiment | "All")[] = ["All", "Bullish", "Bearish", "Neutral"];
 const ENTITY_TYPES: EntityType[] = ["companies", "people", "policies", "markets", "topics"];
@@ -38,7 +38,7 @@ function AssociationsContent() {
   const articleId = searchParams.get("article") || "";
 
   const [timeWindow, setTimeWindow] = useState<TimeWindow>("1M");
-  const [mode, setMode] = useState<AssociationMode>("broad");
+  const [mode, setMode] = useState<AssociationMode>("balanced");
   const [view, setView] = useState<AssociationsView>("evidence");
   const [depth, setDepth] = useState(2);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -170,6 +170,8 @@ function AssociationsContent() {
                     title={
                       option === "broad"
                         ? "Broad: low threshold (0.30), up to 8 results — casts a wide net for loosely related events"
+                        : option === "balanced"
+                        ? "Balanced: mid threshold (0.48), up to 6 results — a middle ground between broad and strict"
                         : "Strict: high threshold (0.65), up to 5 results — only closely matching events"
                     }
                     className={
