@@ -16,7 +16,7 @@ import type {
   TimeWindow,
 } from "@/lib/types";
 
-const MODE_OPTIONS: AssociationMode[] = ["broad", "balanced", "strict", "investigative"];
+const MODE_OPTIONS: AssociationMode[] = ["broad", "strict"];
 const TIME_WINDOWS: TimeWindow[] = ["7D", "1M", "3M", "6M"];
 const SENTIMENT_OPTIONS: (Sentiment | "All")[] = ["All", "Bullish", "Bearish", "Neutral"];
 const ENTITY_TYPES: EntityType[] = ["companies", "people", "policies", "markets", "topics"];
@@ -38,7 +38,7 @@ function AssociationsContent() {
   const articleId = searchParams.get("article") || "";
 
   const [timeWindow, setTimeWindow] = useState<TimeWindow>("1M");
-  const [mode, setMode] = useState<AssociationMode>("balanced");
+  const [mode, setMode] = useState<AssociationMode>("broad");
   const [view, setView] = useState<AssociationsView>("evidence");
   const [depth, setDepth] = useState(2);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -169,12 +169,8 @@ function AssociationsContent() {
                     onClick={() => setMode(option)}
                     title={
                       option === "broad"
-                        ? "Broad: low threshold (0.40), up to 8 results — casts a wide net for loosely related events"
-                        : option === "balanced"
-                        ? "Balanced: medium threshold (0.50), up to 7 results — general-purpose mode"
-                        : option === "strict"
-                        ? "Strict: high threshold (0.65), up to 5 results — only closely matching events"
-                        : "Investigative: weights recent events more heavily (temporal: 0.30) — useful for fast-moving stories"
+                        ? "Broad: low threshold (0.30), up to 8 results — casts a wide net for loosely related events"
+                        : "Strict: high threshold (0.65), up to 5 results — only closely matching events"
                     }
                     className={
                       mode === option
@@ -288,7 +284,7 @@ function AssociationsContent() {
                   <div className="mt-1 flex gap-2 items-center">
                     <button
                       onClick={() => setThreshold(null)}
-                      title="Reset to the threshold defined by the selected mode (Broad / Balanced / Strict / Investigative)"
+                      title="Reset to the threshold defined by the selected mode (Broad / Strict)"
                       className="px-2 py-1 text-[10px] rounded border border-[#30363d] text-slate-400 hover:text-white"
                     >
                       Use Mode Default
@@ -333,10 +329,22 @@ function AssociationsContent() {
                 {view === "graph" ? (
                   <div className="relative h-[560px] rounded-lg overflow-hidden border border-[#1f2731]">
                     {(data.nodes || []).length <= 1 ? (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-slate-500 text-sm text-center px-6">
-                        <span>No related nodes to display.</span>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-center px-6">
+                        {data.focus && (
+                          <div className="border border-[#1f2731] rounded-lg p-4 bg-[#0e1219] max-w-md w-full text-left">
+                            <div className="text-[10px] text-slate-500 mb-1">
+                              {data.focus.source || "Unknown source"} • {formatDate(data.focus.published_at)}
+                            </div>
+                            <h3 className="text-sm font-semibold text-white leading-snug">{data.focus.headline}</h3>
+                            <div className="mt-2 flex items-center gap-2">
+                              <SentimentBadge sentiment={data.focus.sentiment} />
+                              <span className="text-[11px] text-slate-400">Magnitude: <span className="text-amber-300">{data.focus.magnitude}</span><span className="text-[9px] text-slate-600"> / 10</span></span>
+                            </div>
+                          </div>
+                        )}
+                        <span className="text-slate-500 text-sm">No other articles are close enough to be linked.</span>
                         <span className="text-[11px] text-slate-600">
-                          Try relaxing your filters: lower the Link Threshold, switch to <span className="text-amber-300">Broad</span> mode, or increase the Time Window.
+                          Try lowering the Link Threshold or expanding the Time Window.
                         </span>
                       </div>
                     ) : (
@@ -356,8 +364,27 @@ function AssociationsContent() {
                       </span>
                     </div>
                     {data.related_events.length === 0 ? (
-                      <div className="h-56 border border-[#1f2731] rounded-lg flex items-center justify-center text-slate-500 text-sm">
-                        No linked events for these parameters.
+                      <div className="space-y-4">
+                        {data.focus && (
+                          <div className="border-l-2 border-amber-500/60 border border-[#1f2731] rounded-lg p-4 bg-[#0e1219]">
+                            <div className="text-[10px] uppercase tracking-wider text-amber-400/70 font-semibold mb-2">Focus Article</div>
+                            <h3 className="text-sm font-semibold text-white leading-snug">{data.focus.headline}</h3>
+                            {data.focus.summary && (
+                              <p className="text-[12px] text-slate-300 leading-relaxed mt-1.5">{data.focus.summary}</p>
+                            )}
+                            <div className="text-[10px] text-slate-500 mt-2">
+                              {data.focus.source || "Unknown source"} • {formatDate(data.focus.published_at)}
+                            </div>
+                            <div className="mt-2 flex items-center gap-2">
+                              <SentimentBadge sentiment={data.focus.sentiment} />
+                              <span className="text-[11px] text-slate-400">Magnitude: <span className="text-amber-300">{data.focus.magnitude}</span><span className="text-[9px] text-slate-600"> / 10</span></span>
+                            </div>
+                          </div>
+                        )}
+                        <div className="border border-[#1f2731] rounded-lg p-4 flex flex-col items-center justify-center gap-1 text-center">
+                          <span className="text-slate-500 text-sm">No other articles are close enough to be linked.</span>
+                          <span className="text-[11px] text-slate-600">Try lowering the Link Threshold or expanding the Time Window.</span>
+                        </div>
                       </div>
                     ) : (
                       data.related_events.map((event, index) => (

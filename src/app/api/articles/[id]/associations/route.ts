@@ -34,28 +34,16 @@ type ArticleEntities = Record<string, string[]>;
 
 const MODE_CONFIG: Record<AssociationMode, ScoringConfig> = {
   broad: {
-    threshold: 0.45,
+    threshold: 0.30,
     maxRelated: 8,
     minEvidenceSignals: 1,
     weights: { semantic: 0.30, entity: 0.22, magnitude: 0.13, sentiment: 0.10, temporal: 0.15, marketImpact: 0.10 },
-  },
-  balanced: {
-    threshold: 0.55,
-    maxRelated: 6,
-    minEvidenceSignals: 2,
-    weights: { semantic: 0.30, entity: 0.25, magnitude: 0.13, sentiment: 0.10, temporal: 0.10, marketImpact: 0.12 },
   },
   strict: {
     threshold: 0.65,
     maxRelated: 5,
     minEvidenceSignals: 2,
     weights: { semantic: 0.35, entity: 0.25, magnitude: 0.13, sentiment: 0.10, temporal: 0.05, marketImpact: 0.12 },
-  },
-  investigative: {
-    threshold: 0.58,
-    maxRelated: 7,
-    minEvidenceSignals: 2,
-    weights: { semantic: 0.25, entity: 0.22, magnitude: 0.08, sentiment: 0.05, temporal: 0.30, marketImpact: 0.10 },
   },
 };
 
@@ -64,10 +52,10 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function toMode(value: string | null): AssociationMode {
-  if (value === "broad" || value === "balanced" || value === "strict" || value === "investigative") {
+  if (value === "broad" || value === "strict") {
     return value;
   }
-  return "balanced";
+  return "broad";
 }
 
 function toView(value: string | null): AssociationsView {
