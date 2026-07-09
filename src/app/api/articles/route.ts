@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabase } from "@/lib/supabase";
+import { getServiceClient } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { TOPIC_KEYWORDS } from "@/lib/constants";
 
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "20");
     const minMagnitude = parseFloat(searchParams.get("min_magnitude") || "0");
 
-    let query = getSupabase()
+    let query = getServiceClient()
       .from("articles")
       .select("*")
       .not("sentiment", "is", null)

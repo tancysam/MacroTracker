@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabase } from "@/lib/supabase";
+import { getServiceClient } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { TOPIC_KEYWORDS } from "@/lib/constants";
 
@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "primary_topic_key is required" }, { status: 400 });
     }
 
-    let query = getSupabase()
+    let query = getServiceClient()
       .from("articles")
       .select("*")
       .not("sentiment", "is", null)

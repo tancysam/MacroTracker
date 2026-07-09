@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getServiceClient } from "@/lib/supabase";
 import { TRENDING_BLOCKLIST } from "@/lib/constants";
+import { isAuthorizedCronRequest, unauthorizedCronResponse } from "@/lib/cron";
+import { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 
@@ -84,6 +86,7 @@ export async function POST() {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  if (!isAuthorizedCronRequest(request)) return unauthorizedCronResponse();
   return POST();
 }

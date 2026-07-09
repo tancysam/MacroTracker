@@ -3,7 +3,7 @@ import { getServiceClient } from "@/lib/supabase";
 import { TWELVE_DATA_SYMBOLS, fetchDailyCandles } from "@/lib/twelvedata";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 120; // allow up to 2 min for all symbols
+export const maxDuration = 300;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));

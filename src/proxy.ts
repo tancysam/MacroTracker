@@ -1,6 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
 
+const CRON_PATHS = new Set([
+  "/api/ingest",
+  "/api/compute-heat-scores",
+  "/api/market-candles/refresh",
+]);
+
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -26,6 +32,14 @@ export async function proxy(request: NextRequest) {
   );
 
   const { pathname, searchParams } = request.nextUrl;
+
+  if (
+    CRON_PATHS.has(pathname) &&
+    process.env.CRON_SECRET &&
+    request.headers.get("authorization") === `Bearer ${process.env.CRON_SECRET}`
+  ) {
+    return response;
+  }
 
   // Supabase may redirect auth callbacks to the Site URL root (not /auth/callback)
   // when the allowed-redirect-URLs list isn't configured in the dashboard.

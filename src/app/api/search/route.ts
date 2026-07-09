@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabase } from "@/lib/supabase";
+import { getServiceClient } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { generateEmbedding } from "@/lib/openai";
 
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     const embedding = await generateEmbedding(query.trim());
 
     // Call the match_articles RPC function
-    const { data, error } = await getSupabase().rpc("match_articles", {
+    const { data, error } = await getServiceClient().rpc("match_articles", {
       query_embedding: JSON.stringify(embedding),
       match_threshold: 0.3,
       match_count: 20,

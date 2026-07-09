@@ -1,0 +1,28 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/ingest",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/compute-heat-scores",
+      "schedule": "30 0 * * *"
+    },
+    {
+      "path": "/api/market-candles/refresh",
+      "schedule": "0 1 * * *"
+    }
+  ],
+  "functions": {
+    "src/app/api/ingest/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/market-candles/backfill/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/market-candles/refresh/route.ts": {
+      "maxDuration": 300
+    }
+  }
+}

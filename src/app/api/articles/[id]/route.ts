@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabase } from "@/lib/supabase";
+import { getServiceClient } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +15,7 @@ export async function GET(
     try {
         const { id } = await params;
 
-        const { data: article, error } = await getSupabase()
+        const { data: article, error } = await getServiceClient()
             .from("articles")
             .select("*")
             .eq("id", id)

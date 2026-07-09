@@ -41,7 +41,7 @@ export async function extractArticleMetadata(
   summary: string
 ): Promise<ExtractionResult> {
   const response = await getOpenAI().chat.completions.create({
-    model: "gpt-5-nano-2025-08-07",
+    model: "gpt-4o-mini",
     response_format: { type: "json_object" },
     messages: [
       {
@@ -82,7 +82,7 @@ export async function classifyArticle(
   const taxonomyString = taxonomyList.join(", ");
 
   const response = await getOpenAI().chat.completions.create({
-    model: "gpt-5-nano-2025-08-07",
+    model: "gpt-4o-mini",
     response_format: { type: "json_object" },
     messages: [
       {

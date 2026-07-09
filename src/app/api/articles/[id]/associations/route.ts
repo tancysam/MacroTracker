@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabase } from "@/lib/supabase";
+import { getServiceClient } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { TIME_WINDOW_DAYS } from "@/lib/constants";
 import type {
@@ -538,7 +538,7 @@ export async function GET(
         ? [...new Set([...requestedEntityTypes.filter(Boolean), "topics"])]
         : ["companies", "people", "policies", "markets", "topics"];
 
-    const { data: focusArticle, error: focusError } = await getSupabase()
+    const { data: focusArticle, error: focusError } = await getServiceClient()
       .from("articles")
       .select("*")
       .eq("id", id)
@@ -551,7 +551,7 @@ export async function GET(
     const days = TIME_WINDOW_DAYS[timeWindow] || 30;
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
-    let candidateQuery = getSupabase()
+    let candidateQuery = getServiceClient()
       .from("articles")
       .select("*")
       .neq("id", id)

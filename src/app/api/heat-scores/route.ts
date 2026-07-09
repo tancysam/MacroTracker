@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSupabase } from "@/lib/supabase";
+import { getServiceClient } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { TRENDING_BLOCKLIST } from "@/lib/constants";
 
@@ -11,7 +11,7 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { data: scores, error } = await getSupabase()
+    const { data: scores, error } = await getServiceClient()
       .from("heat_scores")
       .select("*")
       .order("heat_score", { ascending: false })

@@ -42,13 +42,12 @@ export default function LoginPage() {
         router.refresh();
       }
     });
-
     return () => subscription.unsubscribe();
   }, [router]);
 
   // Sign-in state
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("demo@demo.com");
+  const [password, setPassword] = useState("demo");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -248,10 +247,17 @@ export default function LoginPage() {
           )}
         </div>
 
-        {/* Credentials notice */}
-        <div className="mt-5 rounded-lg border border-dashed border-red-500/60 bg-red-900/20 px-4 py-3 text-center text-red-300 text-xs leading-relaxed">
-          If you would like to obtain credentials for logging in, please contact{" "}
-          <span className="font-semibold text-red-200">@samtancy</span> on Telegram
+        {/* Demo credentials */}
+        <div className="mt-5 rounded-lg border border-sky-500/30 bg-sky-950/30 px-4 py-3 text-sky-100 text-xs leading-relaxed shadow-[0_0_0_1px_rgba(14,165,233,0.08)]">
+          <p className="font-semibold text-sky-50">Please use the following credentials to login:</p>
+          <div className="mt-3 grid gap-2 font-mono text-[11px] text-sky-100 select-all">
+            <div className="rounded-md border border-sky-500/20 bg-slate-950/60 px-3 py-2">
+              <span className="text-sky-300">Username:</span> demo@demo.com
+            </div>
+            <div className="rounded-md border border-sky-500/20 bg-slate-950/60 px-3 py-2">
+              <span className="text-sky-300">Password:</span> demo
+            </div>
+          </div>
         </div>
 
         <p className="text-center text-slate-600 text-xs mt-4">

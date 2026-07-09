@@ -1,14 +1,18 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServiceClient } from "@/lib/supabase";
 import { TWELVE_DATA_SYMBOLS, fetchDailyCandles } from "@/lib/twelvedata";
+import { isAuthorizedCronRequest, unauthorizedCronResponse } from "@/lib/cron";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  if (!isAuthorizedCronRequest(request)) return unauthorizedCronResponse();
+
   try {
     const supabase = getServiceClient();
     const results: Record<string, { inserted: number; error?: string }> = {};
