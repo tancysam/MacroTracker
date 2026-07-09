@@ -3,6 +3,8 @@ import { createHash } from "crypto";
 import { getServiceClient } from "@/lib/supabase";
 import { fetchGeneralNews } from "@/lib/finnhub";
 import { extractArticleMetadata, classifyArticle, generateEmbedding } from "@/lib/openai";
+import { isAuthorizedCronRequest, unauthorizedCronResponse } from "@/lib/cron";
+import { NextRequest } from "next/server";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -141,6 +143,7 @@ export async function POST() {
 }
 
 // Also support GET for cron jobs (Vercel cron hits with GET)
-export async function GET() {
+export async function GET(request: NextRequest) {
+  if (!isAuthorizedCronRequest(request)) return unauthorizedCronResponse();
   return POST();
 }

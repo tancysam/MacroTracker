@@ -1,20 +1,7 @@
--- Allow anonymous (public) read access to articles
-CREATE POLICY "Public can read articles"
-  ON articles
-  FOR SELECT
-  TO anon
-  USING (true);
+ALTER TABLE articles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE heat_scores ENABLE ROW LEVEL SECURITY;
+ALTER TABLE entity_mentions ENABLE ROW LEVEL SECURITY;
 
--- Allow anonymous read access to heat_scores
-CREATE POLICY "Public can read heat_scores"
-  ON heat_scores
-  FOR SELECT
-  TO anon
-  USING (true);
-
--- Allow anonymous read access to entity_mentions
-CREATE POLICY "Public can read entity_mentions"
-  ON entity_mentions
-  FOR SELECT
-  TO anon
-  USING (true);
+REVOKE ALL ON TABLE articles FROM anon, authenticated;
+REVOKE ALL ON TABLE heat_scores FROM anon, authenticated;
+REVOKE ALL ON TABLE entity_mentions FROM anon, authenticated;

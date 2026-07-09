@@ -17,15 +17,20 @@ create index if not exists chat_sessions_user_updated
 -- Row-level security: users can only see/edit their own sessions
 alter table chat_sessions enable row level security;
 
+revoke all on table chat_sessions from anon;
+grant select, insert, update, delete on table chat_sessions to authenticated;
+
 create policy "Users can manage their own chat sessions"
   on chat_sessions
   for all
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 
 -- Auto-update updated_at on any row change
 create or replace function update_chat_session_timestamp()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql
+set search_path = public
+as $$
 begin
   new.updated_at = now();
   return new;

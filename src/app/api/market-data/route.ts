@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabase } from "@/lib/supabase";
+import { getServiceClient } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { FINNHUB_TO_DB_SYMBOL } from "@/lib/twelvedata";
 
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     const fromDate = new Date(parseInt(from) * 1000).toISOString().slice(0, 10);
     const toDate = new Date(parseInt(to) * 1000).toISOString().slice(0, 10);
 
-    const supabase = getSupabase();
+    const supabase = getServiceClient();
     const { data, error } = await supabase
       .from("market_candles")
       .select("date, close")

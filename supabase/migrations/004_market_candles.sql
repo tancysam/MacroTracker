@@ -11,3 +11,7 @@ CREATE TABLE market_candles (
 );
 
 CREATE INDEX idx_market_candles_symbol_date ON market_candles(symbol, date DESC);
+
+ALTER TABLE market_candles ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON TABLE market_candles FROM anon, authenticated;

@@ -84,6 +84,7 @@ RETURNS TABLE (
   similarity float
 )
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 BEGIN
   RETURN QUERY
@@ -120,6 +121,7 @@ CREATE OR REPLACE FUNCTION article_similarity(
 )
 RETURNS float
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 DECLARE
   sim float;

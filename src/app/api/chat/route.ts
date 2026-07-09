@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { generateEmbedding } from "@/lib/openai";
-import { getSupabase } from "@/lib/supabase";
+import { getServiceClient } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
@@ -32,8 +32,8 @@ interface RetrievedArticle {
   rank_score?: number;
 }
 
-const CHAT_MODEL_MAIN = process.env.CHAT_MODEL_MAIN || "gpt-5.4-2026-03-05";
-const CHAT_MODEL_FALLBACK = process.env.CHAT_MODEL_FALLBACK || "gpt-5-nano-2025-08-07";
+const CHAT_MODEL_MAIN = process.env.CHAT_MODEL_MAIN || "gpt-4o-mini";
+const CHAT_MODEL_FALLBACK = process.env.CHAT_MODEL_FALLBACK || "gpt-4o-mini";
 
 function parseNumberEnv(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
@@ -92,7 +92,7 @@ async function retrieveArticles(query: string): Promise<RetrievedArticle[]> {
   if (!trimmed) return [];
 
   const embedding = await generateEmbedding(trimmed);
-  const { data, error } = await getSupabase().rpc("match_articles", {
+  const { data, error } = await getServiceClient().rpc("match_articles", {
     query_embedding: JSON.stringify(embedding),
     match_threshold: RAG_MATCH_THRESHOLD,
     match_count: RAG_MATCH_COUNT,

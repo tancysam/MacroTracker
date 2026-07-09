@@ -261,13 +261,15 @@ SUPABASE_SERVICE_ROLE_KEY=
 OPENAI_API_KEY=
 FINNHUB_API_KEY=
 TWELVE_DATA_API_KEY=
+CRON_SECRET=
 ```
 
 `SUPABASE_SERVICE_ROLE_KEY` is required for ingestion, heat score compute, and market candle routes. Never expose it in client code.
+`CRON_SECRET` is required for Vercel Cron to call scheduled ingestion and refresh routes securely.
 
 ### Database
 
-Run `supabase/migrations/001_initial_schema.sql` in the Supabase SQL Editor. This sets up all tables, indexes, the `vector` extension, and the `match_articles` RPC.
+Run all SQL files in `supabase/migrations/` in numeric order in the Supabase SQL Editor. This sets up all tables, indexes, RLS policies, the `vector` extension, and the `match_articles` RPC.
 
 ### Local Development
 
@@ -304,8 +306,8 @@ Configured for Vercel cron:
 
 | Job | Cadence |
 |---|---|
-| `/api/ingest` | Every 2 hours |
-| `/api/compute-heat-scores` | Every 15 minutes |
+| `/api/ingest` | Daily on Vercel Hobby (`0 0 * * *`); use every 2 hours on Pro |
+| `/api/compute-heat-scores` | Daily on Vercel Hobby (`30 0 * * *`); use every 15 minutes on Pro |
 | `/api/market-candles/refresh` | Daily |
 
 ---
